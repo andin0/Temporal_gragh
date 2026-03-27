@@ -21,8 +21,17 @@ let simulation = null
 function renderGraph() {
   if (!svgRef.value || !props.graphData) return
 
+  // 清理旧的动画
+  if (simulation) {
+    simulation.stop()
+  }
+
   // 清除旧的画布内容
   d3.select(svgRef.value).selectAll('*').remove()
+
+  // 对传入的数据进行深拷贝，切断响应式关联
+  const nodes = JSON.parse(JSON.stringify(props.graphData.nodes))
+  const links = JSON.parse(JSON.stringify(props.graphData.links))
 
   // 获取 SVG 容器的尺寸
   const container = svgRef.value.parentElement
@@ -52,8 +61,8 @@ function renderGraph() {
     .style('stroke', 'none')
 
   // 创建力导向模拟
-  simulation = d3.forceSimulation(props.graphData.nodes)
-    .force('link', d3.forceLink(props.graphData.links).id(d => d.id).distance(100))
+  simulation = d3.forceSimulation(nodes)
+    .force('link', d3.forceLink(links).id(d => d.id).distance(100))
     .force('charge', d3.forceManyBody().strength(-300))
     .force('center', d3.forceCenter(width / 2, height / 2))
 
@@ -75,7 +84,7 @@ function renderGraph() {
   // 绘制边
   const link = g.append('g')
     .selectAll('line')
-    .data(props.graphData.links)
+    .data(links)
     .enter()
     .append('line')
     .attr('stroke', '#999')
@@ -85,7 +94,7 @@ function renderGraph() {
   // 绘制节点
   const node = g.append('g')
     .selectAll('circle')
-    .data(props.graphData.nodes)
+    .data(nodes)
     .enter()
     .append('circle')
     .attr('r', d => Math.max(5, d.degree * 2)) // 根据度数设置半径
@@ -99,7 +108,7 @@ function renderGraph() {
   // 添加节点标签
   g.append('g')
     .selectAll('text')
-    .data(props.graphData.nodes)
+    .data(nodes)
     .enter()
     .append('text')
     .text(d => d.id)
@@ -153,7 +162,7 @@ watch(
       renderGraph()
     })
   },
-  { deep: true }
+  { deep: false }
 )
 
 // 当组件挂载后渲染
