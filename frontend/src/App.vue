@@ -3,8 +3,26 @@
     <header class="control-bar">
       <h1>时序图可视化</h1>
       <div class="buttons">
-        <button @click="loadTimestampGraph">加载时间戳图</button>
-        <button @click="loadSnapshotGraphs">加载快照</button>
+        <div class="upload-btn-container">
+          <button @click="triggerFileUpload('timestamp')">上传时间戳数据 (CSV/JSON)</button>
+          <input 
+            type="file" 
+            ref="timestampFileInput" 
+            style="display: none" 
+            accept=".csv,.json"
+            @change="handleFileUpload($event, 'timestamp')"
+          />
+        </div>
+        <div class="upload-btn-container">
+          <button @click="triggerFileUpload('snapshot')">上传快照数据 (CSV/JSON)</button>
+          <input 
+            type="file" 
+            ref="snapshotFileInput" 
+            style="display: none" 
+            accept=".csv,.json"
+            @change="handleFileUpload($event, 'snapshot')"
+          />
+        </div>
       </div>
     </header>
     <main class="graph-container">
@@ -67,13 +85,17 @@
 <script setup>
 import { ref, computed, onUnmounted, watch } from 'vue'
 import GraphView from './components/GraphView.vue'
-import { fetchTimestampGraph, fetchSnapshotGraphs } from './api.js'
+import { fetchTimestampGraph, fetchSnapshotGraphs, uploadGraphFile } from './api.js'
 
 const graphData = ref(null)
 const snapshots = ref([])
 const currentIndex = ref(0)
 const isPlaying = ref(false)
 let playInterval = null
+
+// 文件输入框引用
+const timestampFileInput = ref(null)
+const snapshotFileInput = ref(null)
 
 // 新增状态管理
 const currentMode = ref(null)
@@ -218,6 +240,51 @@ function togglePlayPause() {
     }, 1500) // 1.5 秒切换一次
   }
   isPlaying.value = !isPlaying.value
+}
+
+// 触发文件上传
+function triggerFileUpload(mode) {
+  if (mode === 'timestamp') {
+    timestampFileInput.value.click()
+  } else {
+    snapshotFileInput.value.click()
+  }
+}
+
+// 处理文件上传
+async function handleFileUpload(event, mode) {
+  const file = event.target.files[0]
+  if (!file) return
+  
+  try {
+    const result = await uploadGraphFile(file, mode)
+    
+    if (mode === 'timestamp') {
+      // 处理时间戳模式数据
+      fullTimestampData.value = result
+      
+      // 计算时间范围
+      if (result.links.length > 0) {
+        const timestamps = result.links.map(link => link.timestamp)
+        const minTime = Math.min(...timestamps)
+        const maxTime = Math.max(...timestamps)
+        timeRange.value = [minTime, maxTime]
+        selectedTimeWindow.value = [minTime, maxTime] // 初始化为完整时间范围
+      }
+      
+      currentMode.value = 'timestamp'
+      snapshots.value = [] // 清空快照数据
+    } else {
+      // 处理快照模式数据
+      snapshots.value = result
+      currentIndex.value = 0 // 重置到第一帧
+      currentMode.value = 'snapshot'
+      fullTimestampData.value = null // 清空时间戳数据
+    }
+  } catch (error) {
+    console.error('文件上传失败:', error)
+    alert('文件上传失败: ' + error.message)
+  }
 }
 
 // 组件卸载时清除定时器

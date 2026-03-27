@@ -1,7 +1,8 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 import os
-from data_loader import load_from_json, build_timestamp_graph, build_snapshot_graphs, graph_to_dict
+from werkzeug.utils import secure_filename
+from data_loader import load_from_csv, load_from_json, build_timestamp_graph, build_snapshot_graphs, graph_to_dict
 
 app = Flask(__name__)
 CORS(app)  # 配置 CORS 允许前端跨域请求
@@ -100,6 +101,61 @@ def get_snapshot_graphs():
         # 返回 JSON 数组
         return jsonify(result)
     except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/upload', methods=['POST'])
+def upload_file():
+    """上传文件并解析为图表数据"""
+    try:
+        # 检查是否有文件和模式参数
+        if 'file' not in request.files or 'mode' not in request.form:
+            return jsonify({'error': '缺少文件或模式参数'}), 400
+        
+        file = request.files['file']
+        mode = request.form['mode']
+        
+        if mode not in ['timestamp', 'snapshot']:
+            return jsonify({'error': '模式必须是 timestamp 或 snapshot'}), 400
+        
+        # 保存临时文件
+        temp_filename = 'temp_upload' + os.path.splitext(file.filename)[1]
+        file.save(temp_filename)
+        
+        # 根据文件类型加载数据
+        if file.filename.endswith('.csv'):
+            data = load_from_csv(temp_filename, mode)
+        elif file.filename.endswith('.json'):
+            data = load_from_json(temp_filename, mode)
+        else:
+            os.remove(temp_filename)
+            return jsonify({'error': '只支持 CSV 和 JSON 文件'}), 400
+        
+        # 构建图并序列化
+        if mode == 'timestamp':
+            graph = build_timestamp_graph(data)
+            result = graph_to_dict(graph)
+        else:  # snapshot
+            graphs = build_snapshot_graphs(data)
+            result = []
+            for i, graph in enumerate(graphs):
+                graph_dict = graph_to_dict(graph)
+                # 获取对应的 timestamp
+                timestamp = data['snapshots'][i]['timestamp']
+                result.append({
+                    'snapshot_id': i + 1,
+                    'timestamp': timestamp,
+                    'nodes': graph_dict['nodes'],
+                    'links': graph_dict['links']
+                })
+        
+        # 清理临时文件
+        os.remove(temp_filename)
+        
+        return jsonify(result)
+    except Exception as e:
+        # 清理临时文件
+        if 'temp_filename' in locals() and os.path.exists(temp_filename):
+            os.remove(temp_filename)
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
