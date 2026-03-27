@@ -1,0 +1,1 @@
+{"mode": "timestamp", "edges": [{"source": "X", "target": "Y", "timestamp": 1}, {"source": "Y", "target": "Z", "timestamp": 2}, {"source": "Z", "target": "X", "timestamp": 3}, {"source": "X", "target": "Z", "timestamp": 4}, {"source": "Y", "target": "X", "timestamp": 5}]}

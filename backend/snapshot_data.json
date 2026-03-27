@@ -1,0 +1,1 @@
+{"mode": "snapshot", "snapshots": [{"timestamp": 1, "nodes": ["P", "Q", "R"], "edges": [{"source": "P", "target": "Q"}, {"source": "Q", "target": "R"}]}, {"timestamp": 2, "nodes": ["P", "Q", "R", "S"], "edges": [{"source": "P", "target": "Q"}, {"source": "Q", "target": "R"}, {"source": "R", "target": "S"}]}]}

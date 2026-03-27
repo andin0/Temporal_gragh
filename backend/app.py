@@ -1,0 +1,106 @@
+from flask import Flask, jsonify
+from flask_cors import CORS
+import os
+from data_loader import load_from_json, build_timestamp_graph, build_snapshot_graphs, graph_to_dict
+
+app = Flask(__name__)
+CORS(app)  # 配置 CORS 允许前端跨域请求
+
+# 初始化数据
+timestamp_data = None
+snapshot_data = None
+
+def load_mock_data():
+    """加载本地的 mock 文件"""
+    global timestamp_data, snapshot_data
+    
+    # 检查文件是否存在，如果不存在则创建
+    if not os.path.exists('timestamp_data.json'):
+        # 创建时间戳模式的 mock 数据
+        timestamp_json = {
+            "mode": "timestamp",
+            "edges": [
+                {"source": "X", "target": "Y", "timestamp": 1},
+                {"source": "Y", "target": "Z", "timestamp": 2},
+                {"source": "Z", "target": "X", "timestamp": 3},
+                {"source": "X", "target": "Z", "timestamp": 4},
+                {"source": "Y", "target": "X", "timestamp": 5}
+            ]
+        }
+        import json
+        with open('timestamp_data.json', 'w') as f:
+            json.dump(timestamp_json, f)
+    
+    if not os.path.exists('snapshot_data.json'):
+        # 创建快照模式的 mock 数据
+        snapshot_json = {
+            "mode": "snapshot",
+            "snapshots": [
+                {
+                    "timestamp": 1,
+                    "nodes": ["P", "Q", "R"],
+                    "edges": [
+                        {"source": "P", "target": "Q"},
+                        {"source": "Q", "target": "R"}
+                    ]
+                },
+                {
+                    "timestamp": 2,
+                    "nodes": ["P", "Q", "R", "S"],
+                    "edges": [
+                        {"source": "P", "target": "Q"},
+                        {"source": "Q", "target": "R"},
+                        {"source": "R", "target": "S"}
+                    ]
+                }
+            ]
+        }
+        import json
+        with open('snapshot_data.json', 'w') as f:
+            json.dump(snapshot_json, f)
+    
+    # 加载数据
+    timestamp_data = load_from_json('timestamp_data.json', 'timestamp')
+    snapshot_data = load_from_json('snapshot_data.json', 'snapshot')
+
+# 加载 mock 数据
+load_mock_data()
+
+@app.route('/api/graph/timestamp', methods=['GET'])
+def get_timestamp_graph():
+    """获取时间戳图数据"""
+    try:
+        # 构建图
+        graph = build_timestamp_graph(timestamp_data)
+        # 序列化
+        graph_dict = graph_to_dict(graph)
+        # 返回 JSON 格式
+        return jsonify(graph_dict)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/graph/snapshot', methods=['GET'])
+def get_snapshot_graphs():
+    """获取快照图数据"""
+    try:
+        # 构建多个图
+        graphs = build_snapshot_graphs(snapshot_data)
+        # 序列化每个快照
+        result = []
+        for i, graph in enumerate(graphs):
+            graph_dict = graph_to_dict(graph)
+            # 获取对应的 timestamp
+            timestamp = snapshot_data['snapshots'][i]['timestamp']
+            result.append({
+                'snapshot_id': i + 1,
+                'timestamp': timestamp,
+                'nodes': graph_dict['nodes'],
+                'links': graph_dict['links']
+            })
+        # 返回 JSON 数组
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+if __name__ == '__main__':
+    app.run(debug=True, port=5000)
