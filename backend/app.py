@@ -1,6 +1,7 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 import os
+import networkx as nx
 from werkzeug.utils import secure_filename
 from data_loader import load_from_csv, load_from_json, build_timestamp_graph, build_snapshot_graphs, graph_to_dict
 
@@ -10,10 +11,12 @@ CORS(app)  # 配置 CORS 允许前端跨域请求
 # 初始化数据
 timestamp_data = None
 snapshot_data = None
+# 全局图对象
+global_G = None
 
 def load_mock_data():
     """加载本地的 mock 文件"""
-    global timestamp_data, snapshot_data
+    global timestamp_data, snapshot_data, global_G
     
     # 检查文件是否存在，如果不存在则创建
     if not os.path.exists('timestamp_data.json'):
@@ -63,6 +66,9 @@ def load_mock_data():
     # 加载数据
     timestamp_data = load_from_json('timestamp_data.json', 'timestamp')
     snapshot_data = load_from_json('snapshot_data.json', 'snapshot')
+    
+    # 构建并存储图对象
+    global_G = build_timestamp_graph(timestamp_data)
 
 # 加载 mock 数据
 load_mock_data()
@@ -106,6 +112,8 @@ def get_snapshot_graphs():
 @app.route('/api/upload', methods=['POST'])
 def upload_file():
     """上传文件并解析为图表数据"""
+
+    global global_G
     try:
         # 检查是否有文件和模式参数
         if 'file' not in request.files or 'mode' not in request.form:
@@ -134,6 +142,8 @@ def upload_file():
         if mode == 'timestamp':
             graph = build_timestamp_graph(data)
             result = graph_to_dict(graph)
+            # 更新全局图对象 (删掉这里的 global global_G)
+            global_G = graph
         else:  # snapshot
             graphs = build_snapshot_graphs(data)
             result = []
@@ -142,11 +152,10 @@ def upload_file():
                 # 获取对应的 timestamp
                 timestamp = data['snapshots'][i]['timestamp']
                 result.append({
-                    'snapshot_id': i + 1,
-                    'timestamp': timestamp,
-                    'nodes': graph_dict['nodes'],
-                    'links': graph_dict['links']
+                    # ...
                 })
+            # 使用第一个快照更新全局图对象 (删掉这里的 global global_G)
+            global_G = graphs[0]
         
         # 清理临时文件
         os.remove(temp_filename)
@@ -156,6 +165,40 @@ def upload_file():
         # 清理临时文件
         if 'temp_filename' in locals() and os.path.exists(temp_filename):
             os.remove(temp_filename)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/shortest-path', methods=['POST'])
+def shortest_path():
+    """计算最短路径"""
+    try:
+        # 获取参数
+        data = request.json
+        if not data:
+            return jsonify({'error': '缺少参数'}), 400
+        
+        source = data.get('source')
+        target = data.get('target')
+        
+        if not source or not target:
+            return jsonify({'error': '缺少必要参数'}), 400
+        
+        # 检查图是否加载
+        if global_G is None:
+            return jsonify({"error": "图未加载"}), 400
+            
+        try:
+            # 计算最短路径 (忽略方向，或根据需要保留方向)
+            undirected_g = nx.Graph(global_G)
+            path = nx.shortest_path(undirected_g, source=source, target=target)
+            return jsonify({"path": path})
+        except nx.NetworkXNoPath:
+            return jsonify({"error": "两节点之间不存在路径"}), 404
+        except nx.NodeNotFound:
+            return jsonify({"error": "节点不存在"}), 400
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+            
+    except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':

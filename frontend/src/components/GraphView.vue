@@ -10,6 +10,7 @@
       />
       <button @click="handleSearch">定位</button>
       <button @click="handleReset">重置</button>
+      <button @click="clearShortestPath">清除路径</button>
     </div>
     <svg ref="svgRef" class="graph-svg"></svg>
   </div>
@@ -18,11 +19,16 @@
 <script setup>
 import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import * as d3 from 'd3'
+import axios from 'axios'
 
 const props = defineProps({
   graphData: {
     type: Object,
     required: true
+  },
+  mode: {
+    type: String,
+    default: 'timestamp'
   }
 })
 
@@ -31,6 +37,11 @@ let simulation = null
 
 // 搜索相关状态
 const searchQuery = ref('')
+
+// 最短路径相关状态
+let pathSource = null
+let pathTarget = null
+let currentPathNodes = []
 
 // D3 实例和数据，用于搜索和定位
 let d3Zoom = null
@@ -155,6 +166,14 @@ function renderGraph() {
   // 应用缩放行为
   d3Svg = d3.select(svgRef.value)
   d3Svg.call(d3Zoom)
+  
+  // 背景点击清除路径
+  d3Svg.on('click', function(event) {
+    // 只有当点击的是 svg 本身，而不是其他元素时，才清除路径
+    if (event.target === this) {
+      clearShortestPath()
+    }
+  })
 
   // 创建一个包含所有元素的组
   const g = d3.select(svgRef.value)
@@ -249,6 +268,8 @@ function renderGraph() {
       // 重启物理引擎
       simulation.alpha(1).restart()
     })
+    // 右键点击事件，用于设置起点和终点
+    .on('contextmenu', handleRightClick)
 
   // 添加节点标签
   g.append('g')
@@ -391,6 +412,88 @@ function handleReset() {
       .style('opacity', 0.6)
       .style('stroke-width', 3);
   }
+
+  // 清除路径
+  clearShortestPath();
+}
+
+// 处理右键点击事件
+async function handleRightClick(event, d) {
+  event.preventDefault() // 阻止浏览器默认右键菜单
+  
+  if (!pathSource) {
+    // 第一次右键：设置起点
+    pathSource = d
+    d3.select(event.currentTarget).attr('stroke', '#ffeb3b').attr('stroke-width', 4)
+    return
+  }
+  
+  if (pathSource && !pathTarget) {
+    // 第二次右键：设置终点并请求路径
+    pathTarget = d
+    d3.select(event.currentTarget).attr('stroke', '#ffeb3b').attr('stroke-width', 4)
+    
+    try {
+      // 补全后端的 http://127.0.0.1:5000 地址，直接跨域打过去
+      const response = await axios.post('http://127.0.0.1:5000/api/shortest-path', {
+        source: pathSource.id,
+        target: pathTarget.id
+      })
+      currentPathNodes = response.data.path
+      renderPathAnimation(currentPathNodes)
+    } catch (error) {
+      alert(error.response?.data?.error || '路径计算失败')
+      clearShortestPath()
+    }
+  }
+}
+
+// 清除路径
+function clearShortestPath() {
+  pathSource = null
+  pathTarget = null
+  currentPathNodes = []
+  
+  if (nodeSelection) {
+    nodeSelection
+      .attr('stroke', null)
+      .attr('stroke-width', null)
+      .style('opacity', 1)
+  }
+  if (linkSelection) {
+    linkSelection
+      .style('opacity', 0.6)
+      .attr('stroke', '#999')
+      .attr('stroke-width', 3)
+      .style('stroke-dasharray', 'none')
+      .style('animation', 'none')
+  }
+}
+
+// 绘制路径动画
+function renderPathAnimation(pathArray) {
+  // 判断一条边是否在最短路径序列中
+  function isLinkInPath(link, path) {
+    const sId = typeof link.source === 'object' ? link.source.id : link.source
+    const tId = typeof link.target === 'object' ? link.target.id : link.target
+    for (let i = 0; i < path.length - 1; i++) {
+      if ((path[i] === sId && path[i+1] === tId) || (path[i] === tId && path[i+1] === sId)) {
+        return true
+      }
+    }
+    return false
+  }
+
+  // 变暗无关连线，提亮路径连线并加动画
+  linkSelection
+    .style('opacity', d => isLinkInPath(d, pathArray) ? 1 : 0.1)
+    .attr('stroke', d => isLinkInPath(d, pathArray) ? '#ffeb3b' : '#999')
+    .attr('stroke-width', d => isLinkInPath(d, pathArray) ? 5 : 3)
+    .style('stroke-dasharray', d => isLinkInPath(d, pathArray) ? '10, 10' : 'none')
+    .style('animation', d => isLinkInPath(d, pathArray) ? 'dash 1s linear infinite' : 'none')
+
+  // 变暗无关节点
+  nodeSelection.style('opacity', d => pathArray.includes(d.id) ? 1 : 0.1)
 }
 
 // 组件卸载时清理 tooltip
@@ -410,6 +513,10 @@ onUnmounted(() => {
   pointer-events: none;
   z-index: 1000;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+@keyframes dash {
+  to { stroke-dashoffset: -20; }
 }
 </style>
 

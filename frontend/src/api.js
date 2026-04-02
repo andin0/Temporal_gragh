@@ -42,3 +42,18 @@ export async function uploadGraphFile(file, mode) {
     throw error
   }
 }
+
+// 计算最短路径
+export async function calculateShortestPath(sourceId, targetId, mode) {
+  try {
+    const response = await axios.post(`${API_BASE_URL}/api/shortest-path`, {
+      source_id: sourceId,
+      target_id: targetId,
+      mode: mode
+    })
+    return response.data
+  } catch (error) {
+    console.error('计算最短路径失败:', error)
+    throw error
+  }
+}

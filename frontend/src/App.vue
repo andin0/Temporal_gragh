@@ -26,7 +26,7 @@
       </div>
     </header>
     <main class="graph-container">
-      <GraphView v-if="graphData" :graphData="graphData" />
+      <GraphView v-if="graphData" :graphData="graphData" :mode="currentMode" />
       <div v-else class="loading">点击上方按钮加载图表</div>
     </main>
     <!-- 快照模式的时间轴 -->
