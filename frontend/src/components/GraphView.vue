@@ -2,15 +2,28 @@
   <div class="graph-view">
     <!-- 悬浮搜索框 -->
     <div class="search-overlay">
-      <input 
-        v-model="searchQuery" 
-        type="text" 
-        placeholder="输入节点 ID 搜索" 
-        @keyup.enter="handleSearch"
-      />
-      <button @click="handleSearch">定位</button>
-      <button @click="handleReset">重置</button>
-      <button @click="clearShortestPath">清除路径</button>
+      <div class="control-group">
+        <div class="search-box">
+          <span class="search-icon">🔍</span>
+          <input 
+            v-model="searchQuery" 
+            type="text" 
+            placeholder="输入节点 ID 搜索..." 
+            @keyup.enter="handleSearch"
+          />
+        </div>
+        <button class="btn primary" @click="handleSearch">定位</button>
+        <button class="btn secondary" @click="handleReset">重置</button>
+        <button class="btn danger" @click="clearShortestPath">清除路径</button>
+      </div>
+      
+      <div v-if="pathSource" class="path-info">
+        <div class="path-badge source">📍 起点: <strong>{{ pathSource.id }}</strong></div>
+        <div class="path-arrow" v-if="pathTarget">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+        </div>
+        <div class="path-badge target" v-if="pathTarget">🎯 终点: <strong>{{ pathTarget.id }}</strong></div>
+      </div>
     </div>
     <svg ref="svgRef" class="graph-svg"></svg>
   </div>
@@ -39,8 +52,8 @@ let simulation = null
 const searchQuery = ref('')
 
 // 最短路径相关状态
-let pathSource = null
-let pathTarget = null
+const pathSource = ref(null)
+const pathTarget = ref(null)
 let currentPathNodes = []
 
 // D3 实例和数据，用于搜索和定位
@@ -220,6 +233,9 @@ function renderGraph() {
         .style('opacity', 1)
         .html(`节点: ${d.id}<br>度数: ${d.degree}`)
 
+      // 【核心修复】如果处于寻路模式，立即退出，不执行悬浮高亮逻辑
+      if (pathSource.value || pathTarget.value || currentPathNodes.length > 0) return
+
       // 关联高亮：节点
       nodeSelection.style('opacity', (o) => {
         return isConnected(d, o) ? 1 : 0.1
@@ -242,6 +258,9 @@ function renderGraph() {
     .on('mouseout', () => {
       // 隐藏 Tooltip
       tooltip.style('opacity', 0)
+
+      // 【核心修复】如果处于寻路模式，立即退出，防止恢复透明度破坏跑马灯
+      if (pathSource.value || pathTarget.value || currentPathNodes.length > 0) return
 
       // 恢复所有节点的透明度
       nodeSelection.style('opacity', 1)
@@ -421,23 +440,24 @@ function handleReset() {
 async function handleRightClick(event, d) {
   event.preventDefault() // 阻止浏览器默认右键菜单
   
-  if (!pathSource) {
+  if (!pathSource.value) {
     // 第一次右键：设置起点
-    pathSource = d
+    pathSource.value = d
     d3.select(event.currentTarget).attr('stroke', '#ffeb3b').attr('stroke-width', 4)
     return
   }
   
-  if (pathSource && !pathTarget) {
+  if (pathSource.value && !pathTarget.value) {
     // 第二次右键：设置终点并请求路径
-    pathTarget = d
+    pathTarget.value = d
     d3.select(event.currentTarget).attr('stroke', '#ffeb3b').attr('stroke-width', 4)
     
     try {
       // 补全后端的 http://127.0.0.1:5000 地址，直接跨域打过去
       const response = await axios.post('http://127.0.0.1:5000/api/shortest-path', {
-        source: pathSource.id,
-        target: pathTarget.id
+        source: pathSource.value.id,
+        target: pathTarget.value.id,
+        links: props.graphData.links // 将当前画面的真实连线发给后端
       })
       currentPathNodes = response.data.path
       renderPathAnimation(currentPathNodes)
@@ -450,8 +470,8 @@ async function handleRightClick(event, d) {
 
 // 清除路径
 function clearShortestPath() {
-  pathSource = null
-  pathTarget = null
+  pathSource.value = null
+  pathTarget.value = null
   currentPathNodes = []
   
   if (nodeSelection) {
@@ -477,13 +497,13 @@ function renderPathAnimation(pathArray) {
     const sId = typeof link.source === 'object' ? link.source.id : link.source
     const tId = typeof link.target === 'object' ? link.target.id : link.target
     for (let i = 0; i < path.length - 1; i++) {
-      if ((path[i] === sId && path[i+1] === tId) || (path[i] === tId && path[i+1] === sId)) {
+      // 【核心修复】严格匹配有向图方向：起点必须是 path[i]，终点必须是 path[i+1]
+      if (path[i] === sId && path[i+1] === tId) {
         return true
       }
     }
     return false
   }
-
   // 变暗无关连线，提亮路径连线并加动画
   linkSelection
     .style('opacity', d => isLinkInPath(d, pathArray) ? 1 : 0.1)
@@ -505,16 +525,43 @@ onUnmounted(() => {
 .d3-tooltip {
   position: absolute;
   opacity: 0;
-  background-color: rgba(0, 0, 0, 0.8);
-  color: white;
-  padding: 8px 12px;
-  border-radius: 4px;
-  font-size: 12px;
+  background: rgba(15, 23, 42, 0.9);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  color: #f8fafc;
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.5;
   pointer-events: none;
   z-index: 1000;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transform: translateY(10px);
+  transition: opacity 0.2s, transform 0.2s;
 }
 
+.toast-message {
+  position: absolute;
+  top: 40px; /* 改为顶部居中更现代 */
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(8px);
+  color: #fff;
+  padding: 12px 24px;
+  border-radius: 30px; /* 胶囊形状 */
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  z-index: 2000;
+  pointer-events: none;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.2);
+  display: flex;
+  align-items: center;
+}
+
+/* 跑马灯动画保持 */
 @keyframes dash {
   to { stroke-dashoffset: -20; }
 }
@@ -526,55 +573,128 @@ onUnmounted(() => {
   height: 100%;
   overflow: hidden;
   position: relative;
+  background-color: #f8fafc; /* 更柔和的底层背景色 */
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
 .graph-svg {
-  background-color: white;
-  border-radius: 4px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  background-color: transparent;
+  width: 100%;
+  height: 100%;
 }
 
+/* 毛玻璃悬浮面板 */
 .search-overlay {
   position: absolute;
-  top: 10px;
-  left: 10px;
-  background-color: rgba(255, 255, 255, 0.9);
-  padding: 10px;
-  border-radius: 4px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  top: 20px;
+  left: 20px;
+  background: rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  padding: 16px;
+  border-radius: 16px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
   z-index: 1000;
   display: flex;
-  gap: 8px;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 320px;
+}
+
+/* 控制按钮组排版 */
+.control-group {
+  display: flex;
+  gap: 10px;
   align-items: center;
 }
 
+/* 现代搜索框 */
+.search-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.search-icon {
+  position: absolute;
+  left: 10px;
+  font-size: 14px;
+  color: #94a3b8;
+  pointer-events: none;
+}
+
 .search-overlay input {
-  padding: 6px 10px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  font-size: 12px;
-  min-width: 150px;
+  padding: 8px 12px 8px 32px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 13px;
+  width: 180px;
+  background: rgba(255, 255, 255, 0.9);
+  transition: all 0.3s ease;
+  color: #334155;
+  outline: none;
 }
 
-.search-overlay button {
-  padding: 6px 12px;
-  border: none;
-  border-radius: 4px;
-  background-color: #4CAF50;
-  color: white;
+.search-overlay input:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+/* 现代按钮设计 */
+.btn {
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
   cursor: pointer;
+  border: none;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn.primary {
+  background-color: #3b82f6;
+  color: white;
+  box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);
+}
+.btn.primary:hover { background-color: #2563eb; transform: translateY(-1px); }
+
+.btn.secondary {
+  background-color: #f1f5f9;
+  color: #475569;
+}
+.btn.secondary:hover { background-color: #e2e8f0; color: #0f172a; }
+
+.btn.danger {
+  background-color: #fff1f2;
+  color: #e11d48;
+  border: 1px solid #ffe4e6;
+}
+.btn.danger:hover { background-color: #ffe4e6; }
+
+/* 优雅的路径状态栏 */
+.path-info {
+  display: flex;
+  align-items: center;
+  padding-top: 12px;
+  border-top: 1px solid #e2e8f0;
+  gap: 8px;
+}
+
+.path-badge {
+  padding: 6px 12px;
+  border-radius: 6px;
   font-size: 12px;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
 }
 
-.search-overlay button:hover {
-  background-color: #45a049;
-}
-
-.search-overlay button:nth-child(3) {
-  background-color: #f44336;
-}
-
-.search-overlay button:nth-child(3):hover {
-  background-color: #da190b;
-}
+.path-badge strong { margin-left: 4px; font-weight: 700; }
+.path-badge.source { background-color: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; }
+.path-badge.target { background-color: #eff6ff; color: #1e3a8a; border: 1px solid #bfdbfe; }
+.path-arrow { color: #94a3b8; display: flex; align-items: center; }
 </style>

@@ -171,33 +171,30 @@ def upload_file():
 def shortest_path():
     """计算最短路径"""
     try:
-        # 获取参数
         data = request.json
-        if not data:
-            return jsonify({'error': '缺少参数'}), 400
-        
         source = data.get('source')
         target = data.get('target')
-        
-        if not source or not target:
+        current_links = data.get('links') # 接收前端当前正在展示的连线
+
+        if not source or not target or current_links is None:
             return jsonify({'error': '缺少必要参数'}), 400
-        
-        # 检查图是否加载
-        if global_G is None:
-            return jsonify({"error": "图未加载"}), 400
-            
-        try:
-            # 计算最短路径 (忽略方向，或根据需要保留方向)
-            undirected_g = nx.Graph(global_G)
-            path = nx.shortest_path(undirected_g, source=source, target=target)
-            return jsonify({"path": path})
-        except nx.NetworkXNoPath:
-            return jsonify({"error": "两节点之间不存在路径"}), 404
-        except nx.NodeNotFound:
-            return jsonify({"error": "节点不存在"}), 400
-        except Exception as e:
-            return jsonify({"error": str(e)}), 500
-            
+
+        # 根据前端实际渲染的连线，动态临时构建严格有向图
+        strict_g = nx.DiGraph()
+        for link in current_links:
+            src = link['source']
+            tgt = link['target']
+            src_id = src['id'] if isinstance(src, dict) else src
+            tgt_id = tgt['id'] if isinstance(tgt, dict) else tgt
+            strict_g.add_edge(src_id, tgt_id)
+
+        if source not in strict_g or target not in strict_g:
+            return jsonify({"error": "当前视图中不存在该节点"}), 404
+
+        path = nx.shortest_path(strict_g, source=source, target=target)
+        return jsonify({"path": path})
+    except nx.NetworkXNoPath:
+        return jsonify({"error": "两节点之间不存在有向路径"}), 404
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
