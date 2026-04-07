@@ -25,11 +25,10 @@ export async function fetchSnapshotGraphs() {
 }
 
 // 上传图表文件
-export async function uploadGraphFile(file, mode) {
+export async function uploadGraphFile(file) {
   try {
     const formData = new FormData()
     formData.append('file', file)
-    formData.append('mode', mode)
     
     const response = await axios.post(`${API_BASE_URL}/api/upload`, formData, {
       headers: {

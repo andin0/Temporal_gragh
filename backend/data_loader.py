@@ -2,6 +2,39 @@ import pandas as pd
 import networkx as nx
 import json
 
+def detect_mode(data):
+    """
+    自动检测数据模式
+    
+    Args:
+        data: 数据对象，可以是字典（JSON解析后）或DataFrame（CSV读取后）
+    
+    Returns:
+        str: 检测到的模式，'timestamp' 或 'snapshot'
+    """
+    if isinstance(data, dict):
+        # JSON数据
+        if 'snapshots' in data:
+            return 'snapshot'
+        elif 'edges' in data:
+            # 检查edges中是否有timestamp
+            edges = data.get('edges', [])
+            if edges and isinstance(edges, list):
+                first_edge = edges[0]
+                if 'timestamp' in first_edge:
+                    return 'timestamp'
+        # 默认返回snapshot
+        return 'snapshot'
+    elif isinstance(data, pd.DataFrame):
+        # CSV数据
+        columns = [col.lower() for col in data.columns]
+        if 'timestamp' in columns or 'time' in columns:
+            return 'timestamp'
+        else:
+            return 'snapshot'
+    else:
+        raise ValueError("Unsupported data type")
+
 def load_from_csv(file_path, mode):
     """
     从CSV文件加载时序图数据
@@ -46,22 +79,18 @@ def load_from_csv(file_path, mode):
     
     return data
 
-def load_from_json(file_path, mode):
+def load_from_json(file_path):
     """
     从JSON文件加载时序图数据
     
     Args:
         file_path (str): JSON文件路径
-        mode (str): 数据模式，'timestamp' 或 'snapshot'
     
     Returns:
         dict: 加载的数据
     """
     with open(file_path, 'r') as f:
         data = json.load(f)
-    
-    if data.get('mode') != mode:
-        raise ValueError(f"Data mode in file does not match specified mode: {mode}")
     
     return data
 

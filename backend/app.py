@@ -3,7 +3,7 @@ from flask_cors import CORS
 import os
 import networkx as nx
 from werkzeug.utils import secure_filename
-from data_loader import load_from_csv, load_from_json, build_timestamp_graph, build_snapshot_graphs, graph_to_dict
+from data_loader import load_from_csv, load_from_json, build_timestamp_graph, build_snapshot_graphs, graph_to_dict, detect_mode
 
 app = Flask(__name__)
 CORS(app)  # 配置 CORS 允许前端跨域请求
@@ -64,8 +64,8 @@ def load_mock_data():
             json.dump(snapshot_json, f)
     
     # 加载数据
-    timestamp_data = load_from_json('timestamp_data.json', 'timestamp')
-    snapshot_data = load_from_json('snapshot_data.json', 'snapshot')
+    timestamp_data = load_from_json('timestamp_data.json')
+    snapshot_data = load_from_json('snapshot_data.json')
     
     # 构建并存储图对象
     global_G = build_timestamp_graph(timestamp_data)
@@ -115,34 +115,34 @@ def upload_file():
 
     global global_G
     try:
-        # 检查是否有文件和模式参数
-        if 'file' not in request.files or 'mode' not in request.form:
-            return jsonify({'error': '缺少文件或模式参数'}), 400
+        # 检查是否有文件
+        if 'file' not in request.files:
+            return jsonify({'error': '缺少文件参数'}), 400
         
         file = request.files['file']
-        mode = request.form['mode']
-        
-        if mode not in ['timestamp', 'snapshot']:
-            return jsonify({'error': '模式必须是 timestamp 或 snapshot'}), 400
         
         # 保存临时文件
         temp_filename = 'temp_upload' + os.path.splitext(file.filename)[1]
         file.save(temp_filename)
         
-        # 根据文件类型加载数据
+        # 加载数据并检测模式
         if file.filename.endswith('.csv'):
-            data = load_from_csv(temp_filename, mode)
+            import pandas as pd
+            df = pd.read_csv(temp_filename)
+            detected_mode = detect_mode(df)
+            data = load_from_csv(temp_filename, detected_mode)
         elif file.filename.endswith('.json'):
-            data = load_from_json(temp_filename, mode)
+            data = load_from_json(temp_filename)
+            detected_mode = detect_mode(data)
         else:
             os.remove(temp_filename)
             return jsonify({'error': '只支持 CSV 和 JSON 文件'}), 400
         
         # 构建图并序列化
-        if mode == 'timestamp':
+        if detected_mode == 'timestamp':
             graph = build_timestamp_graph(data)
             result = graph_to_dict(graph)
-            # 更新全局图对象 (删掉这里的 global global_G)
+            # 更新全局图对象
             global_G = graph
         else:  # snapshot
             graphs = build_snapshot_graphs(data)
@@ -152,15 +152,23 @@ def upload_file():
                 # 获取对应的 timestamp
                 timestamp = data['snapshots'][i]['timestamp']
                 result.append({
-                    # ...
+                    'snapshot_id': i + 1,
+                    'timestamp': timestamp,
+                    'nodes': graph_dict['nodes'],
+                    'links': graph_dict['links']
                 })
-            # 使用第一个快照更新全局图对象 (删掉这里的 global global_G)
+            # 使用第一个快照更新全局图对象
             global_G = graphs[0]
         
         # 清理临时文件
         os.remove(temp_filename)
         
-        return jsonify(result)
+        # 返回结果和检测到的模式
+        response = {
+            'data': result,
+            'detected_mode': detected_mode
+        }
+        return jsonify(response)
     except Exception as e:
         # 清理临时文件
         if 'temp_filename' in locals() and os.path.exists(temp_filename):

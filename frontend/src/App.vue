@@ -4,23 +4,13 @@
       <h1>时序图可视化</h1>
       <div class="buttons">
         <div class="upload-btn-container">
-          <button @click="triggerFileUpload('timestamp')">上传时间戳数据 (CSV/JSON)</button>
+          <button class="cyber-btn" @click="triggerFileUpload">上传数据 (CSV/JSON)</button>
           <input 
             type="file" 
-            ref="timestampFileInput" 
+            ref="fileInput" 
             style="display: none" 
             accept=".csv,.json"
-            @change="handleFileUpload($event, 'timestamp')"
-          />
-        </div>
-        <div class="upload-btn-container">
-          <button @click="triggerFileUpload('snapshot')">上传快照数据 (CSV/JSON)</button>
-          <input 
-            type="file" 
-            ref="snapshotFileInput" 
-            style="display: none" 
-            accept=".csv,.json"
-            @change="handleFileUpload($event, 'snapshot')"
+            @change="handleFileUpload"
           />
         </div>
       </div>
@@ -94,8 +84,7 @@ const isPlaying = ref(false)
 let playInterval = null
 
 // 文件输入框引用
-const timestampFileInput = ref(null)
-const snapshotFileInput = ref(null)
+const fileInput = ref(null)
 
 // 新增状态管理
 const currentMode = ref(null)
@@ -243,29 +232,26 @@ function togglePlayPause() {
 }
 
 // 触发文件上传
-function triggerFileUpload(mode) {
-  if (mode === 'timestamp') {
-    timestampFileInput.value.click()
-  } else {
-    snapshotFileInput.value.click()
-  }
+function triggerFileUpload() {
+  fileInput.value.click()
 }
 
 // 处理文件上传
-async function handleFileUpload(event, mode) {
+async function handleFileUpload(event) {
   const file = event.target.files[0]
   if (!file) return
   
   try {
-    const result = await uploadGraphFile(file, mode)
+    const response = await uploadGraphFile(file)
+    const { data, detected_mode } = response
     
-    if (mode === 'timestamp') {
+    if (detected_mode === 'timestamp') {
       // 处理时间戳模式数据
-      fullTimestampData.value = result
+      fullTimestampData.value = data
       
       // 计算时间范围
-      if (result.links.length > 0) {
-        const timestamps = result.links.map(link => link.timestamp)
+      if (data.links.length > 0) {
+        const timestamps = data.links.map(link => link.timestamp)
         const minTime = Math.min(...timestamps)
         const maxTime = Math.max(...timestamps)
         timeRange.value = [minTime, maxTime]
@@ -276,7 +262,7 @@ async function handleFileUpload(event, mode) {
       snapshots.value = [] // 清空快照数据
     } else {
       // 处理快照模式数据
-      snapshots.value = result
+      snapshots.value = data
       currentIndex.value = 0 // 重置到第一帧
       currentMode.value = 'snapshot'
       fullTimestampData.value = null // 清空时间戳数据
@@ -338,6 +324,42 @@ onUnmounted(() => {
 
 .buttons button:hover {
   background-color: #45a049;
+}
+
+.cyber-btn {
+  background: rgba(0, 30, 60, 0.8);
+  border: 1px solid #00f2fe;
+  border-radius: 4px;
+  color: #00f2fe;
+  padding: 0.75rem 1.5rem;
+  font-size: 1rem;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+  text-shadow: 0 0 10px rgba(0, 242, 254, 0.5);
+}
+
+.cyber-btn:hover {
+  background: rgba(0, 242, 254, 0.1);
+  box-shadow: 0 0 20px rgba(0, 242, 254, 0.6);
+  border-color: #00f2fe;
+}
+
+.cyber-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(0, 242, 254, 0.2), transparent);
+  transition: left 0.5s;
+}
+
+.cyber-btn:hover::before {
+  left: 100%;
 }
 
 .graph-container {
