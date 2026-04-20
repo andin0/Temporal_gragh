@@ -127,9 +127,11 @@ function renderGraph() {
     .attr('height', height)
 
   // 创建箭头标记
-  d3.select(svgRef.value)
+  const defs = d3.select(svgRef.value)
     .append('defs')
-    .append('marker')
+    
+  // 默认灰色箭头
+  defs.append('marker')
     .attr('id', 'arrowhead')
     .attr('viewBox', '-0 -5 10 10')
     .attr('refX', 20)
@@ -141,6 +143,21 @@ function renderGraph() {
     .append('svg:path')
     .attr('d', 'M 0,-5 L 10 ,0 L 0,5')
     .attr('fill', '#999')
+    .style('stroke', 'none')
+  
+  // 高亮金色箭头（用于最短路径）
+  defs.append('marker')
+    .attr('id', 'arrow-highlight')
+    .attr('viewBox', '-0 -5 10 10')
+    .attr('refX', 20)
+    .attr('refY', 0)
+    .attr('orient', 'auto')
+    .attr('markerWidth', 6)
+    .attr('markerHeight', 6)
+    .attr('xoverflow', 'visible')
+    .append('svg:path')
+    .attr('d', 'M 0,-5 L 10 ,0 L 0,5')
+    .attr('fill', '#ffeb3b')
     .style('stroke', 'none')
 
   // 计算节点度数的最大值和最小值
@@ -485,36 +502,38 @@ function clearShortestPath() {
       .style('opacity', 0.6)
       .attr('stroke', '#999')
       .attr('stroke-width', 3)
+      .attr('marker-end', 'url(#arrowhead)')
       .style('stroke-dasharray', 'none')
       .style('animation', 'none')
   }
 }
 
 // 绘制路径动画
-function renderPathAnimation(pathArray) {
-  // 判断一条边是否在最短路径序列中
-  function isLinkInPath(link, path) {
-    const sId = typeof link.source === 'object' ? link.source.id : link.source
-    const tId = typeof link.target === 'object' ? link.target.id : link.target
-    for (let i = 0; i < path.length - 1; i++) {
-      // 【核心修复】严格匹配有向图方向：起点必须是 path[i]，终点必须是 path[i+1]
-      if (path[i] === sId && path[i+1] === tId) {
-        return true
+  function renderPathAnimation(pathArray) {
+    // 判断一条边是否在最短路径序列中
+    function isLinkInPath(link, path) {
+      const sId = typeof link.source === 'object' ? link.source.id : link.source
+      const tId = typeof link.target === 'object' ? link.target.id : link.target
+      for (let i = 0; i < path.length - 1; i++) {
+        // 【核心修复】严格匹配有向图方向：起点必须是 path[i]，终点必须是 path[i+1]
+        if (path[i] === sId && path[i+1] === tId) {
+          return true
+        }
       }
+      return false
     }
-    return false
-  }
-  // 变暗无关连线，提亮路径连线并加动画
-  linkSelection
-    .style('opacity', d => isLinkInPath(d, pathArray) ? 1 : 0.1)
-    .attr('stroke', d => isLinkInPath(d, pathArray) ? '#ffeb3b' : '#999')
-    .attr('stroke-width', d => isLinkInPath(d, pathArray) ? 5 : 3)
-    .style('stroke-dasharray', d => isLinkInPath(d, pathArray) ? '10, 10' : 'none')
-    .style('animation', d => isLinkInPath(d, pathArray) ? 'dash 1s linear infinite' : 'none')
+    // 变暗无关连线，提亮路径连线并加动画
+    linkSelection
+      .style('opacity', d => isLinkInPath(d, pathArray) ? 1 : 0.1)
+      .attr('stroke', d => isLinkInPath(d, pathArray) ? '#ffeb3b' : '#999')
+      .attr('stroke-width', d => isLinkInPath(d, pathArray) ? 5 : 3)
+      .attr('marker-end', d => isLinkInPath(d, pathArray) ? 'url(#arrow-highlight)' : 'url(#arrowhead)')
+      .style('stroke-dasharray', d => isLinkInPath(d, pathArray) ? '10, 10' : 'none')
+      .style('animation', d => isLinkInPath(d, pathArray) ? 'dash 1s linear infinite' : 'none')
 
-  // 变暗无关节点
-  nodeSelection.style('opacity', d => pathArray.includes(d.id) ? 1 : 0.1)
-}
+    // 变暗无关节点
+    nodeSelection.style('opacity', d => pathArray.includes(d.id) ? 1 : 0.1)
+  }
 
 // 组件卸载时清理 tooltip
 onUnmounted(() => {
