@@ -1,6 +1,7 @@
 import pandas as pd
 import networkx as nx
 import json
+from networkx.algorithms import community
 
 def detect_mode(data):
     """
@@ -163,12 +164,27 @@ def graph_to_dict(nx_graph):
     nodes = []
     links = []
     
+    # 计算PageRank
+    pagerank = nx.pagerank(nx_graph)
+    
+    # 社区检测
+    undirected_G = nx_graph.to_undirected()
+    communities = community.greedy_modularity_communities(undirected_G)
+    
+    # 创建社区映射
+    community_map = {}
+    for i, comm in enumerate(communities):
+        for node in comm:
+            community_map[node] = i
+    
     # 计算节点度数并添加到节点属性
     for node in nx_graph.nodes():
         degree = nx_graph.degree(node)
         nodes.append({
             'id': node,
-            'degree': degree
+            'degree': degree,
+            'pagerank': pagerank.get(node, 0),
+            'group': community_map.get(node, 0)
         })
     
     # 添加边，包含source, target和timestamp
