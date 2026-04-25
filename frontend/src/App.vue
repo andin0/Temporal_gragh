@@ -22,15 +22,24 @@
     <!-- 快照模式的时间轴 -->
     <footer class="timeline" v-if="currentMode === 'snapshot' && snapshots.length > 0">
       <div class="timeline-controls">
-        <button @click="togglePlayPause" class="play-pause-btn">
-          {{ isPlaying ? '暂停' : '播放' }}
+        <button @click="togglePlayPause" class="cyber-btn play-pause-btn">
+          {{ isPlaying ? '⏸ 暂停' : '▶ 播放' }}
         </button>
+        <div class="speed-control">
+          <label class="speed-label">速度:</label>
+          <select v-model="playbackSpeed" class="speed-select">
+            <option value="0.5">0.5x</option>
+            <option value="1">1x</option>
+            <option value="2">2x</option>
+          </select>
+        </div>
         <input 
           type="range" 
           class="timeline-slider" 
           :min="0" 
           :max="snapshots.length - 1" 
           v-model.number="currentIndex"
+          @input="handleSliderInput"
         />
         <div class="current-time">
           时间: {{ currentSnapshot?.timestamp || 0 }}
@@ -81,6 +90,7 @@ const graphData = ref(null)
 const snapshots = ref([])
 const currentIndex = ref(0)
 const isPlaying = ref(false)
+const playbackSpeed = ref(1)
 let playInterval = null
 
 // 文件输入框引用
@@ -216,6 +226,15 @@ function togglePlayPause() {
     playInterval = null
   } else {
     // 播放
+    // 如果当前在最后一帧，重置到第一帧
+    if (currentIndex.value >= snapshots.value.length - 1) {
+      currentIndex.value = 0
+      updateGraphData()
+    }
+    
+    // 根据播放速度计算间隔
+    const interval = 1500 / parseFloat(playbackSpeed.value)
+    
     playInterval = setInterval(() => {
       if (currentIndex.value < snapshots.value.length - 1) {
         currentIndex.value++
@@ -226,9 +245,16 @@ function togglePlayPause() {
         playInterval = null
         isPlaying.value = false
       }
-    }, 1500) // 1.5 秒切换一次
+    }, interval)
   }
   isPlaying.value = !isPlaying.value
+}
+
+// 处理滑块输入，自动暂停播放
+function handleSliderInput() {
+  if (isPlaying.value) {
+    togglePlayPause()
+  }
 }
 
 // 触发文件上传
@@ -394,19 +420,42 @@ onUnmounted(() => {
   flex-wrap: wrap;
 }
 
-.play-pause-btn {
-  padding: 0.5rem 1rem;
-  border: none;
-  border-radius: 4px;
-  background-color: #4CAF50;
-  color: white;
-  cursor: pointer;
-  font-size: 1rem;
-  min-width: 80px;
+.speed-control {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
-.play-pause-btn:hover {
-  background-color: #45a049;
+.speed-label {
+  color: #00f2fe;
+  font-weight: bold;
+  font-size: 0.9rem;
+  text-shadow: 0 0 10px rgba(0, 242, 254, 0.5);
+}
+
+.speed-select {
+  background: rgba(0, 30, 60, 0.8);
+  border: 1px solid #00f2fe;
+  border-radius: 4px;
+  color: #00f2fe;
+  padding: 0.3rem 0.6rem;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.speed-select:hover {
+  background: rgba(0, 242, 254, 0.1);
+  box-shadow: 0 0 10px rgba(0, 242, 254, 0.5);
+}
+
+.speed-select option {
+  background: #0f172a;
+  color: #00f2fe;
+}
+
+.play-pause-btn {
+  min-width: 100px;
 }
 
 .timeline-slider {
