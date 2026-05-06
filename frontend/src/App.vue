@@ -1,5 +1,22 @@
 <template>
   <div class="app">
+    <!-- Toast Notification -->
+    <div v-if="toastMessage" class="toast-container" :class="{ show: toastVisible }">
+      <div class="toast">
+        <div class="toast-icon">⚠️</div>
+        <div class="toast-text">{{ toastMessage }}</div>
+        <button class="toast-close" @click="hideToast">✕</button>
+      </div>
+    </div>
+
+    <!-- Global Loading Mask -->
+    <div v-if="isLoading" class="loading-mask">
+      <div class="loading-content">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">正在进行图计算与智能分析...</div>
+      </div>
+    </div>
+
     <header class="control-bar">
       <h1>时序图可视化</h1>
       <div class="buttons">
@@ -16,8 +33,13 @@
       </div>
     </header>
     <main class="graph-container">
-      <GraphView v-if="graphData" :graphData="graphData" :mode="currentMode" />
-      <div v-else class="loading">点击上方按钮加载图表</div>
+      <!-- Enhanced Empty State -->
+      <div v-if="!graphData && !isLoading" class="empty-state">
+        <div class="empty-icon">📊</div>
+        <div class="empty-title">暂无数据</div>
+        <div class="empty-description">请点击上方按钮上传 CSV/JSON 文件进行图分析</div>
+      </div>
+      <GraphView v-if="graphData && !isLoading" :graphData="graphData" :mode="currentMode" />
     </main>
     <!-- 快照模式的时间轴 -->
     <footer class="timeline" v-if="currentMode === 'snapshot' && snapshots.length > 0">
@@ -91,6 +113,10 @@ const snapshots = ref([])
 const currentIndex = ref(0)
 const isPlaying = ref(false)
 const playbackSpeed = ref(1)
+const isLoading = ref(false)
+const toastMessage = ref('')
+const toastVisible = ref(false)
+let toastTimeout = null
 let playInterval = null
 
 // 文件输入框引用
@@ -267,6 +293,18 @@ async function handleFileUpload(event) {
   const file = event.target.files[0]
   if (!file) return
   
+  // 前端文件格式校验
+  const allowedExtensions = ['csv', 'json']
+  const fileExtension = file.name.split('.').pop().toLowerCase()
+  if (!allowedExtensions.includes(fileExtension)) {
+    showToast('请上传 CSV 或 JSON 格式的文件')
+    // 清空文件输入
+    event.target.value = ''
+    return
+  }
+  
+  isLoading.value = true
+  
   try {
     const response = await uploadGraphFile(file)
     const { data, detected_mode } = response
@@ -295,14 +333,44 @@ async function handleFileUpload(event) {
     }
   } catch (error) {
     console.error('文件上传失败:', error)
-    alert('文件上传失败: ' + error.message)
+    showToast(error.message || '数据格式异常或网络请求失败')
+  } finally {
+    isLoading.value = false
+    // 清空文件输入以便重新上传
+    event.target.value = ''
   }
+}
+
+// Toast 通知函数
+function showToast(message) {
+  toastMessage.value = message
+  toastVisible.value = true
+  
+  // 清除之前的定时器
+  if (toastTimeout) {
+    clearTimeout(toastTimeout)
+  }
+  
+  // 3秒后自动隐藏
+  toastTimeout = setTimeout(() => {
+    hideToast()
+  }, 3000)
+}
+
+function hideToast() {
+  toastVisible.value = false
+  setTimeout(() => {
+    toastMessage.value = ''
+  }, 300)
 }
 
 // 组件卸载时清除定时器
 onUnmounted(() => {
   if (playInterval) {
     clearInterval(playInterval)
+  }
+  if (toastTimeout) {
+    clearTimeout(toastTimeout)
   }
 })
 </script>
@@ -319,22 +387,33 @@ onUnmounted(() => {
   height: 100vh;
   display: flex;
   flex-direction: column;
-  background-color: #f5f5f5;
+  background-color: #F5F5F7;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
 }
 
 .control-bar {
-  background-color: #333;
-  color: white;
-  padding: 1rem;
+  background-color: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  color: #1D1D1F;
+  padding: 1rem 2rem;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
   height: 80px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.5);
 }
 
 .control-bar h1 {
   font-size: 1.5rem;
+  font-weight: 600;
+  color: #1D1D1F;
+  letter-spacing: -0.02em;
+}
+
+.buttons button {
+  margin-left: 1rem;
 }
 
 .buttons button {
@@ -353,24 +432,23 @@ onUnmounted(() => {
 }
 
 .cyber-btn {
-  background: rgba(0, 30, 60, 0.8);
-  border: 1px solid #00f2fe;
-  border-radius: 4px;
-  color: #00f2fe;
-  padding: 0.75rem 1.5rem;
+  background: #007AFF;
+  border: none;
+  border-radius: 24px;
+  color: #FFFFFF;
+  padding: 0.75rem 2rem;
   font-size: 1rem;
-  font-weight: bold;
+  font-weight: 500;
   cursor: pointer;
   transition: all 0.3s ease;
   position: relative;
   overflow: hidden;
-  text-shadow: 0 0 10px rgba(0, 242, 254, 0.5);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
 }
 
 .cyber-btn:hover {
-  background: rgba(0, 242, 254, 0.1);
-  box-shadow: 0 0 20px rgba(0, 242, 254, 0.6);
-  border-color: #00f2fe;
+  background: #0051D5;
+  box-shadow: 0 4px 20px rgba(0, 122, 255, 0.25);
 }
 
 .cyber-btn::before {
@@ -380,7 +458,7 @@ onUnmounted(() => {
   left: -100%;
   width: 100%;
   height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(0, 242, 254, 0.2), transparent);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
   transition: left 0.5s;
 }
 
@@ -395,103 +473,246 @@ onUnmounted(() => {
   align-items: center;
   position: relative;
   overflow: hidden;
+  background-color: #F5F5F7;
 }
 
 .loading {
   font-size: 1.2rem;
-  color: #666;
+  color: #86868B;
 }
 
 .timeline {
-  background-color: #333;
-  color: white;
-  padding: 1rem;
+  background-color: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  color: #1D1D1F;
+  padding: 1rem 2rem;
   height: 80px;
   display: flex;
   align-items: center;
-  box-shadow: 0 -2px 4px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.08);
+  border-top: 1px solid rgba(255, 255, 255, 0.5);
 }
 
 .timeline-controls {
   width: 100%;
   display: flex;
   align-items: center;
-  gap: 1rem;
+  gap: 1.5rem;
   flex-wrap: wrap;
 }
 
 .speed-control {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.75rem;
 }
 
 .speed-label {
-  color: #00f2fe;
-  font-weight: bold;
+  color: #86868B;
+  font-weight: 500;
   font-size: 0.9rem;
-  text-shadow: 0 0 10px rgba(0, 242, 254, 0.5);
 }
 
 .speed-select {
-  background: rgba(0, 30, 60, 0.8);
-  border: 1px solid #00f2fe;
-  border-radius: 4px;
-  color: #00f2fe;
-  padding: 0.3rem 0.6rem;
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 12px;
+  color: #1D1D1F;
+  padding: 0.5rem 1rem;
   font-size: 0.9rem;
   cursor: pointer;
   transition: all 0.3s ease;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
 }
 
 .speed-select:hover {
-  background: rgba(0, 242, 254, 0.1);
-  box-shadow: 0 0 10px rgba(0, 242, 254, 0.5);
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
 }
 
 .speed-select option {
-  background: #0f172a;
-  color: #00f2fe;
+  background: #FFFFFF;
+  color: #1D1D1F;
 }
 
 .play-pause-btn {
-  min-width: 100px;
+  min-width: 120px;
 }
 
 .timeline-slider {
   flex: 1;
-  height: 8px;
+  height: 6px;
   -webkit-appearance: none;
   appearance: none;
-  background: #555;
+  background: #D2D2D7;
   outline: none;
-  border-radius: 4px;
+  border-radius: 3px;
   min-width: 200px;
 }
 
 .timeline-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 16px;
-  height: 16px;
-  background: #4CAF50;
+  width: 20px;
+  height: 20px;
+  background: #007AFF;
   cursor: pointer;
   border-radius: 50%;
+  box-shadow: 0 2px 8px rgba(0, 122, 255, 0.3);
 }
 
 .timeline-slider::-moz-range-thumb {
-  width: 16px;
-  height: 16px;
-  background: #4CAF50;
+  width: 20px;
+  height: 20px;
+  background: #007AFF;
   cursor: pointer;
   border-radius: 50%;
   border: none;
+  box-shadow: 0 2px 8px rgba(0, 122, 255, 0.3);
+}
+
+/* Empty State */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  text-align: center;
+  padding: 2rem;
+  background: #F5F5F7;
+}
+
+.empty-icon {
+  font-size: 4rem;
+  margin-bottom: 1.5rem;
+  animation: float 3s ease-in-out infinite;
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+.empty-title {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #1D1D1F;
+  margin-bottom: 0.5rem;
+  letter-spacing: -0.02em;
+}
+
+.empty-description {
+  font-size: 1rem;
+  color: #86868B;
+  max-width: 400px;
+}
+
+/* Loading Mask */
+.loading-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(245, 245, 247, 0.85);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+}
+
+.loading-content {
+  text-align: center;
+}
+
+.loading-spinner {
+  width: 60px;
+  height: 60px;
+  border: 3px solid rgba(0, 122, 255, 0.15);
+  border-top-color: #007AFF;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 1.5rem;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.loading-text {
+  color: #1D1D1F;
+  font-size: 1.1rem;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+/* Toast Notification */
+.toast-container {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%) translateY(-100px);
+  z-index: 10000;
+  transition: transform 0.3s ease;
+  pointer-events: none;
+}
+
+.toast-container.show {
+  transform: translateX(-50%) translateY(0);
+  pointer-events: auto;
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(255, 59, 48, 0.2);
+  border-radius: 16px;
+  padding: 16px 24px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
+  min-width: 350px;
+}
+
+.toast-icon {
+  font-size: 1.5rem;
+}
+
+.toast-text {
+  flex: 1;
+  color: #1D1D1F;
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+.toast-close {
+  background: none;
+  border: none;
+  color: #86868B;
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+
+.toast-close:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: #1D1D1F;
 }
 
 .current-time {
   min-width: 150px;
   font-size: 1rem;
-  font-weight: bold;
+  font-weight: 500;
+  color: #1D1D1F;
 }
 
 .time-window-container {
@@ -504,7 +725,8 @@ onUnmounted(() => {
 .time-label {
   font-size: 0.9rem;
   margin-bottom: 0.5rem;
-  color: #ddd;
+  color: #86868B;
+  font-weight: 500;
 }
 
 </style>

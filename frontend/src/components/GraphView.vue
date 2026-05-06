@@ -93,7 +93,64 @@
       </div>
     </div>
     
-    <svg ref="svgRef" class="graph-svg"></svg>
+    <!-- Graph View Container -->
+    <div class="graph-view-container">
+      <!-- Empty State for Empty Graph Data -->
+      <div v-if="graphData && (graphData.nodes.length === 0 || graphData.links.length === 0)" class="empty-graph-state">
+        <div class="empty-graph-icon">🔍</div>
+        <div class="empty-graph-title">当前时间窗口内无数据</div>
+        <div class="empty-graph-description">请调整时间窗口或加载其他数据</div>
+      </div>
+      
+      <svg ref="svgRef" class="graph-svg"></svg>
+    </div>
+    
+    <!-- 节点详情抽屉 -->
+    <div 
+      v-if="selectedNode" 
+      class="node-drawer-overlay" 
+      @click="closeDrawer"
+    ></div>
+    <div 
+      v-if="selectedNode" 
+      class="node-drawer"
+      :class="{ 'open': isDrawerOpen }"
+    >
+      <div class="drawer-header">
+        <h2 class="node-id">{{ selectedNode.id }}</h2>
+        <button class="close-btn" @click="closeDrawer">✕</button>
+      </div>
+      <div class="drawer-content">
+        <!-- 算法研判标签 -->
+        <div class="profile-card">
+          <h3 class="card-title">算法研判</h3>
+          <div class="profile-item">
+            <span class="item-label">核心度得分 (PageRank):</span>
+            <span class="item-value">{{ (selectedNode.pagerank || 0).toFixed(4) }}</span>
+          </div>
+          <div class="profile-item">
+            <span class="item-label">所属团伙:</span>
+            <div class="group-info">
+              <span class="group-color" :style="{ backgroundColor: getColorForGroup(selectedNode.group || 0) }"></span>
+              <span class="group-name">Group {{ selectedNode.group || 0 }}</span>
+            </div>
+          </div>
+        </div>
+        
+        <!-- 动态统计指标 -->
+        <div class="profile-card">
+          <h3 class="card-title">网络指标</h3>
+          <div class="profile-item">
+            <span class="item-label">入度 (In-Degree):</span>
+            <span class="item-value">{{ inDegree }}</span>
+          </div>
+          <div class="profile-item">
+            <span class="item-label">出度 (Out-Degree):</span>
+            <span class="item-value">{{ outDegree }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -139,6 +196,10 @@ let height = 0
 // 图例相关状态
 let radiusScale = null
 
+// 节点详情抽屉状态
+const selectedNode = ref(null)
+const isDrawerOpen = ref(false)
+
 // 计算唯一的社区组
 const uniqueGroups = computed(() => {
   if (!props.graphData || !props.graphData.nodes) return []
@@ -148,6 +209,41 @@ const uniqueGroups = computed(() => {
   })
   return Array.from(groups).sort((a, b) => a - b)
 })
+
+// 计算入度和出度
+const inDegree = computed(() => {
+  if (!selectedNode.value || !props.graphData || !props.graphData.links) return 0
+  return props.graphData.links.filter(link => {
+    const targetId = typeof link.target === 'object' ? link.target.id : link.target
+    return targetId === selectedNode.value.id
+  }).length
+})
+
+const outDegree = computed(() => {
+  if (!selectedNode.value || !props.graphData || !props.graphData.links) return 0
+  return props.graphData.links.filter(link => {
+    const sourceId = typeof link.source === 'object' ? link.source.id : link.source
+    return sourceId === selectedNode.value.id
+  }).length
+})
+
+// 打开抽屉
+function openDrawer(node) {
+  selectedNode.value = node
+  // 触发动画
+  setTimeout(() => {
+    isDrawerOpen.value = true
+  }, 10)
+}
+
+// 关闭抽屉
+function closeDrawer() {
+  isDrawerOpen.value = false
+  // 等动画结束后清除选中节点
+  setTimeout(() => {
+    selectedNode.value = null
+  }, 300)
+}
 
 // 计算 PageRank 相关值
 const pagerankValues = computed(() => {
@@ -204,7 +300,7 @@ const pagerankMediumBound = computed(() => {
 
 // 获取组的颜色
 function getColorForGroup(group) {
-  if (!colorScale) return '#999'
+  if (!colorScale) return '#D2D2D7'
   return colorScale(group)
 }
 
@@ -235,9 +331,9 @@ function handleLegendHover(interval) {
     .transition()
     .duration(300)
     .style('opacity', d => isInInterval(d) ? 1 : 0.1)
-    .style('stroke', d => isInInterval(d) ? '#00f2fe' : 'none')
-    .style('stroke-width', d => isInInterval(d) ? 2 : 0)
-    .style('filter', d => isInInterval(d) ? 'drop-shadow(0 0 8px #00f2fe)' : 'none')
+    .style('stroke', d => isInInterval(d) ? '#007AFF' : '#FFFFFF')
+    .style('stroke-width', d => isInInterval(d) ? 3 : 2)
+    .style('filter', d => isInInterval(d) ? 'drop-shadow(0 0 8px rgba(0, 122, 255, 0.4))' : 'none')
   
   // 高亮关联连线
   linkSelection
@@ -341,7 +437,7 @@ function renderGraph() {
   const defs = d3.select(svgRef.value)
     .append('defs')
     
-  // 默认灰色箭头
+  // 默认浅灰色箭头
   defs.append('marker')
     .attr('id', 'arrowhead')
     .attr('viewBox', '-0 -5 10 10')
@@ -353,10 +449,10 @@ function renderGraph() {
     .attr('xoverflow', 'visible')
     .append('svg:path')
     .attr('d', 'M 0,-5 L 10 ,0 L 0,5')
-    .attr('fill', '#999')
+    .attr('fill', '#D2D2D7')
     .style('stroke', 'none')
   
-  // 高亮金色箭头（用于最短路径）
+  // 高亮Apple蓝色箭头（用于最短路径）
   defs.append('marker')
     .attr('id', 'arrow-highlight')
     .attr('viewBox', '-0 -5 10 10')
@@ -368,7 +464,7 @@ function renderGraph() {
     .attr('xoverflow', 'visible')
     .append('svg:path')
     .attr('d', 'M 0,-5 L 10 ,0 L 0,5')
-    .attr('fill', '#ffeb3b')
+    .attr('fill', '#007AFF')
     .style('stroke', 'none')
 
   // 计算节点度数的最大值和最小值
@@ -386,8 +482,9 @@ function renderGraph() {
     .domain([minPR, maxPR])
     .range([5, 30])
 
-  // 创建颜色比例尺（映射社区）
-  colorScale = d3.scaleOrdinal(d3.schemeSet2)
+  // 创建颜色比例尺（映射社区） - 使用Apple风格的柔和色彩
+  colorScale = d3.scaleOrdinal()
+    .range(['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#98D8C8', '#F7DC6F'])
 
   // 构建邻接关系表
   linkedByIndex = {}
@@ -436,9 +533,9 @@ function renderGraph() {
     .enter()
     .append('path')
     .attr('fill', 'none') // 防止 SVG 默认填充曲线闭合区域
-    .attr('stroke', '#999')
-    .attr('opacity', 0.6) // 使用整体透明度代替 stroke-opacity，确保箭头也会变暗
-    .attr('stroke-width', 3) // 加粗连线，便于触发 hover
+    .attr('stroke', '#D2D2D7')
+    .attr('opacity', 0.7) // 使用整体透明度代替 stroke-opacity，确保箭头也会变暗
+    .attr('stroke-width', 2) // 连线粗细
     .attr('marker-end', 'url(#arrowhead)')
     // 为连线添加鼠标事件
     .on('mouseover', (event, d) => {
@@ -463,6 +560,8 @@ function renderGraph() {
     .append('circle')
     .attr('r', d => radiusScale(d.pagerank || 0)) // 根据PageRank设置半径
     .attr('fill', d => colorScale(d.group || 0)) // 根据社区设置颜色
+    .attr('stroke', '#FFFFFF') // 添加白色描边增强立体感
+    .attr('stroke-width', 2)
     // 为节点添加鼠标事件
     .on('mouseover', (event, d) => {
       // 显示 Tooltip
@@ -504,15 +603,15 @@ function renderGraph() {
 
       // 恢复所有连线的透明度和线宽
       linkSelection
-        .style('opacity', 0.6)
-        .style('stroke-width', 3)
+        .style('opacity', 0.7)
+        .style('stroke-width', 2)
     })
     .call(d3.drag()
       .on('start', dragstarted)
       .on('drag', dragged)
       .on('end', dragended)
     )
-    // 双击解除固定
+    // 双击解除固定并打开详情抽屉
     .on('dblclick', (event, d) => {
       // 解除固定
       d.fx = null
@@ -523,6 +622,8 @@ function renderGraph() {
         .attr('stroke-width', null)
       // 重启物理引擎
       simulation.alpha(1).restart()
+      // 打开节点详情抽屉
+      openDrawer(d)
     })
     // 右键点击事件，用于设置起点和终点
     .on('contextmenu', handleRightClick)
@@ -647,14 +748,14 @@ function handleSearch() {
       return isConnected(targetNode, o) ? 1 : 0.1;
     });
 
-    // 高亮连线
-    linkSelection
-      .style('opacity', (o) => {
-        return o.source.id === targetNode.id || o.target.id === targetNode.id ? 1 : 0.1;
-      })
-      .style('stroke-width', (o) => {
-        return o.source.id === targetNode.id || o.target.id === targetNode.id ? 4 : 3;
-      });
+    // 关联高亮：连线
+      linkSelection
+        .style('opacity', (o) => {
+          return o.source.id === d.id || o.target.id === d.id ? 1 : 0.1;
+        })
+        .style('stroke-width', (o) => {
+          return o.source.id === d.id || o.target.id === d.id ? 3 : 2;
+        });
   }
 }
 
@@ -673,8 +774,8 @@ function handleReset() {
   if (nodeSelection && linkSelection) {
     nodeSelection.style('opacity', 1);
     linkSelection
-      .style('opacity', 0.6)
-      .style('stroke-width', 3);
+      .style('opacity', 0.7)
+      .style('stroke-width', 2);
   }
 
   // 清除路径
@@ -688,14 +789,14 @@ async function handleRightClick(event, d) {
   if (!pathSource.value) {
     // 第一次右键：设置起点
     pathSource.value = d
-    d3.select(event.currentTarget).attr('stroke', '#ffeb3b').attr('stroke-width', 4)
+    d3.select(event.currentTarget).attr('stroke', '#007AFF').attr('stroke-width', 4)
     return
   }
   
   if (pathSource.value && !pathTarget.value) {
     // 第二次右键：设置终点并请求路径
     pathTarget.value = d
-    d3.select(event.currentTarget).attr('stroke', '#ffeb3b').attr('stroke-width', 4)
+    d3.select(event.currentTarget).attr('stroke', '#007AFF').attr('stroke-width', 4)
     
     try {
       // 补全后端的 http://127.0.0.1:5000 地址，直接跨域打过去
@@ -721,15 +822,15 @@ function clearShortestPath() {
   
   if (nodeSelection) {
     nodeSelection
-      .attr('stroke', null)
-      .attr('stroke-width', null)
+      .attr('stroke', '#FFFFFF')
+      .attr('stroke-width', 2)
       .style('opacity', 1)
   }
   if (linkSelection) {
     linkSelection
-      .style('opacity', 0.6)
-      .attr('stroke', '#999')
-      .attr('stroke-width', 3)
+      .style('opacity', 0.7)
+      .attr('stroke', '#D2D2D7')
+      .attr('stroke-width', 2)
       .attr('marker-end', 'url(#arrowhead)')
       .style('stroke-dasharray', 'none')
       .style('animation', 'none')
@@ -753,8 +854,8 @@ function clearShortestPath() {
     // 变暗无关连线，提亮路径连线并加动画
     linkSelection
       .style('opacity', d => isLinkInPath(d, pathArray) ? 1 : 0.1)
-      .attr('stroke', d => isLinkInPath(d, pathArray) ? '#ffeb3b' : '#999')
-      .attr('stroke-width', d => isLinkInPath(d, pathArray) ? 5 : 3)
+      .attr('stroke', d => isLinkInPath(d, pathArray) ? '#007AFF' : '#D2D2D7')
+      .attr('stroke-width', d => isLinkInPath(d, pathArray) ? 4 : 2)
       .attr('marker-end', d => isLinkInPath(d, pathArray) ? 'url(#arrow-highlight)' : 'url(#arrowhead)')
       .style('stroke-dasharray', d => isLinkInPath(d, pathArray) ? '10, 10' : 'none')
       .style('animation', d => isLinkInPath(d, pathArray) ? 'dash 1s linear infinite' : 'none')
@@ -858,20 +959,21 @@ onUnmounted(() => {
 .d3-tooltip {
   position: absolute;
   opacity: 0;
-  background: rgba(15, 23, 42, 0.9);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
-  color: #f8fafc;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  color: #1D1D1F;
   padding: 10px 16px;
-  border-radius: 8px;
+  border-radius: 12px;
   font-size: 13px;
   line-height: 1.5;
   pointer-events: none;
   z-index: 1000;
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+  border: 1px solid rgba(0, 0, 0, 0.05);
   transform: translateY(10px);
   transition: opacity 0.2s, transform 0.2s;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
 }
 
 .toast-message {
@@ -879,19 +981,20 @@ onUnmounted(() => {
   top: 40px; /* 改为顶部居中更现代 */
   left: 50%;
   transform: translateX(-50%);
-  background: rgba(15, 23, 42, 0.85);
-  backdrop-filter: blur(8px);
-  color: #fff;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(20px);
+  color: #1D1D1F;
   padding: 12px 24px;
   border-radius: 30px; /* 胶囊形状 */
   font-size: 14px;
   font-weight: 500;
-  letter-spacing: 0.5px;
+  letter-spacing: -0.01em;
   z-index: 2000;
   pointer-events: none;
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
   display: flex;
   align-items: center;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
 }
 
 /* 跑马灯动画保持 */
@@ -906,8 +1009,8 @@ onUnmounted(() => {
   height: 100%;
   overflow: hidden;
   position: relative;
-  background-color: #f8fafc; /* 更柔和的底层背景色 */
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background-color: #F5F5F7; /* Apple风格的柔和背景色 */
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
 }
 
 .graph-svg {
@@ -953,71 +1056,72 @@ onUnmounted(() => {
   position: absolute;
   left: 10px;
   font-size: 14px;
-  color: #94a3b8;
+  color: #86868B;
   pointer-events: none;
 }
 
 .search-overlay input {
   padding: 8px 12px 8px 32px;
-  border: 1px solid #cbd5e1;
-  border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 12px;
   font-size: 13px;
   width: 180px;
   background: rgba(255, 255, 255, 0.9);
   transition: all 0.3s ease;
-  color: #334155;
+  color: #1D1D1F;
   outline: none;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
 }
 
 .search-overlay input:focus {
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+  border-color: #007AFF;
+  box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.15);
 }
 
 /* 现代按钮设计 */
 .btn {
   padding: 8px 16px;
-  border-radius: 8px;
+  border-radius: 12px;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
   cursor: pointer;
   border: none;
   transition: all 0.2s ease;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
 }
 
 .btn.primary {
-  background-color: #3b82f6;
+  background-color: #007AFF;
   color: white;
-  box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);
+  box-shadow: 0 2px 8px rgba(0, 122, 255, 0.25);
 }
-.btn.primary:hover { background-color: #2563eb; transform: translateY(-1px); }
+.btn.primary:hover { background-color: #0051D5; transform: translateY(-1px); }
 
 .btn.secondary {
-  background-color: #f1f5f9;
-  color: #475569;
+  background-color: rgba(0, 0, 0, 0.05);
+  color: #1D1D1F;
 }
-.btn.secondary:hover { background-color: #e2e8f0; color: #0f172a; }
+.btn.secondary:hover { background-color: rgba(0, 0, 0, 0.08); color: #000000; }
 
 .btn.danger {
-  background-color: #fff1f2;
-  color: #e11d48;
-  border: 1px solid #ffe4e6;
+  background-color: rgba(255, 59, 48, 0.1);
+  color: #FF3B30;
+  border: 1px solid rgba(255, 59, 48, 0.2);
 }
-.btn.danger:hover { background-color: #ffe4e6; }
+.btn.danger:hover { background-color: rgba(255, 59, 48, 0.15); }
 
 .btn.export {
-  background-color: rgba(0, 30, 60, 0.8);
-  color: #00f2fe;
-  border: 1px solid #00f2fe;
-  box-shadow: 0 2px 4px rgba(0, 242, 254, 0.3);
+  background-color: rgba(0, 0, 0, 0.05);
+  color: #1D1D1F;
+  border: 1px solid rgba(0, 0, 0, 0.1);
 }
 
 .btn.export:hover {
-  background-color: rgba(0, 242, 254, 0.1);
-  box-shadow: 0 0 20px rgba(0, 242, 254, 0.6);
+  background-color: rgba(0, 0, 0, 0.08);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   transform: translateY(-1px);
 }
 
@@ -1026,49 +1130,49 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   padding-top: 12px;
-  border-top: 1px solid #e2e8f0;
+  border-top: 1px solid rgba(0, 0, 0, 0.1);
   gap: 8px;
 }
 
 .path-badge {
   padding: 6px 12px;
-  border-radius: 6px;
+  border-radius: 12px;
   font-size: 12px;
   font-weight: 500;
   display: inline-flex;
   align-items: center;
 }
 
-.path-badge strong { margin-left: 4px; font-weight: 700; }
-.path-badge.source { background-color: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; }
-.path-badge.target { background-color: #eff6ff; color: #1e3a8a; border: 1px solid #bfdbfe; }
-.path-arrow { color: #94a3b8; display: flex; align-items: center; }
+.path-badge strong { margin-left: 4px; font-weight: 600; }
+.path-badge.source { background-color: rgba(52, 199, 89, 0.1); color: #34C759; border: 1px solid rgba(52, 199, 89, 0.2); }
+.path-badge.target { background-color: rgba(0, 122, 255, 0.1); color: #007AFF; border: 1px solid rgba(0, 122, 255, 0.2); }
+.path-arrow { color: #86868B; display: flex; align-items: center; }
 
 /* 动态图例面板 */
 .legend-panel {
   position: absolute;
   bottom: 20px;
   right: 20px;
-  background: rgba(15, 23, 42, 0.8);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(0, 242, 254, 0.3);
-  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 16px;
   padding: 16px;
-  box-shadow: 0 10px 25px -5px rgba(0, 242, 254, 0.2), 0 8px 10px -6px rgba(0, 242, 254, 0.1);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
   z-index: 999;
   min-width: 200px;
   max-width: 300px;
-  color: #f8fafc;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  color: #1D1D1F;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
 }
 
 .legend-title {
   font-size: 16px;
-  font-weight: 700;
+  font-weight: 600;
   margin: 0 0 12px 0;
-  color: #00f2fe;
-  text-shadow: 0 0 10px rgba(0, 242, 254, 0.5);
+  color: #1D1D1F;
+  letter-spacing: -0.02em;
 }
 
 .legend-section {
@@ -1077,9 +1181,9 @@ onUnmounted(() => {
 
 .legend-subtitle {
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 500;
   margin: 0 0 8px 0;
-  color: #94a3b8;
+  color: #86868B;
 }
 
 .color-legend {
@@ -1099,7 +1203,7 @@ onUnmounted(() => {
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  border: 1px solid rgba(0, 0, 0, 0.1);
 }
 
 .color-label {
@@ -1120,22 +1224,24 @@ onUnmounted(() => {
 }
 
 .size-circle {
-  border: 2px solid #00f2fe;
+  border: 2px solid #007AFF;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 242, 254, 0.1);
+  background: rgba(0, 122, 255, 0.05);
 }
 
 .size-label {
   flex: 1;
+  color: #1D1D1F;
 }
 
 .size-value {
-  color: #00f2fe;
-  font-family: monospace;
+  color: #007AFF;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
   font-size: 11px;
+  font-weight: 500;
 }
 
 /* 响应式调整 */
@@ -1146,5 +1252,217 @@ onUnmounted(() => {
     left: 10px;
     max-width: none;
   }
+  
+  .node-drawer {
+    width: 280px;
+  }
+}
+
+/* 节点详情抽屉 */
+.node-drawer-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: 9998;
+  opacity: 0;
+  animation: fadeIn 0.3s ease forwards;
+}
+
+@keyframes fadeIn {
+  to {
+    opacity: 1;
+  }
+}
+
+.node-drawer {
+  position: fixed;
+  top: 0;
+  right: -400px;
+  width: 350px;
+  height: 100vh;
+  background: rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border-left: 1px solid rgba(255, 255, 255, 0.5);
+  box-shadow: -8px 0 32px rgba(0, 0, 0, 0.08);
+  z-index: 9999;
+  transition: right 0.3s ease;
+  overflow-y: auto;
+  color: #1D1D1F;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+}
+
+.node-drawer.open {
+  right: 0;
+}
+
+.drawer-header {
+  padding: 20px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.5);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.node-id {
+  font-size: 20px;
+  font-weight: 600;
+  color: #1D1D1F;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  color: #86868B;
+  font-size: 24px;
+  cursor: pointer;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+
+.close-btn:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: #1D1D1F;
+}
+
+.drawer-content {
+  padding: 20px;
+}
+
+.profile-card {
+  background: rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 16px;
+  padding: 16px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.card-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0 0 12px 0;
+  color: #1D1D1F;
+  letter-spacing: -0.02em;
+}
+
+.profile-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.profile-item:last-child {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.item-label {
+  font-size: 14px;
+  color: #86868B;
+}
+
+.item-value {
+  font-size: 14px;
+  font-weight: 500;
+  color: #1D1D1F;
+}
+
+.group-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.group-color {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.group-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: #1D1D1F;
+}
+
+/* 滚动条样式 */
+.node-drawer::-webkit-scrollbar {
+  width: 6px;
+}
+
+.node-drawer::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.node-drawer::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 3px;
+}
+
+.node-drawer::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.25);
+}
+
+/* Graph View Container */
+.graph-view-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+/* Empty Graph State */
+.empty-graph-state {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  pointer-events: none;
+}
+
+.empty-graph-icon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+  opacity: 0.4;
+}
+
+.empty-graph-title {
+  font-size: 1.2rem;
+  color: #1D1D1F;
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+}
+
+.empty-graph-description {
+  font-size: 0.9rem;
+  color: #86868B;
 }
 </style>
