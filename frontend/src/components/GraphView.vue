@@ -48,49 +48,7 @@
           </div>
         </div>
       </div>
-      
-      <!-- 大小图例 (PageRank) -->
-      <div class="legend-section">
-        <h4 class="legend-subtitle">核心程度</h4>
-        <div class="size-legend">
-          <div 
-            class="size-item"
-            @mouseenter="handleLegendHover('low')"
-            @mouseleave="handleLegendLeave"
-          >
-            <div 
-              class="size-circle" 
-              :style="{ width: sizeMin + 'px', height: sizeMin + 'px' }"
-            ></div>
-            <span class="size-label">边缘节点</span>
-            <span class="size-value">{{ pagerankMin.toFixed(4) }}</span>
-          </div>
-          <div 
-            class="size-item"
-            @mouseenter="handleLegendHover('medium')"
-            @mouseleave="handleLegendLeave"
-          >
-            <div 
-              class="size-circle" 
-              :style="{ width: sizeMed + 'px', height: sizeMed + 'px' }"
-            ></div>
-            <span class="size-label">常规节点</span>
-            <span class="size-value">{{ pagerankMed.toFixed(4) }}</span>
-          </div>
-          <div 
-            class="size-item"
-            @mouseenter="handleLegendHover('high')"
-            @mouseleave="handleLegendLeave"
-          >
-            <div 
-              class="size-circle" 
-              :style="{ width: sizeMax + 'px', height: sizeMax + 'px' }"
-            ></div>
-            <span class="size-label">核心枢纽</span>
-            <span class="size-value">{{ pagerankMax.toFixed(4) }}</span>
-          </div>
-        </div>
-      </div>
+
     </div>
     
     <!-- Graph View Container -->
@@ -245,134 +203,10 @@ function closeDrawer() {
   }, 300)
 }
 
-// 计算 PageRank 相关值
-const pagerankValues = computed(() => {
-  if (!props.graphData || !props.graphData.nodes) return []
-  return props.graphData.nodes.map(node => node.pagerank || 0)
-})
-
-const pagerankMin = computed(() => {
-  const values = pagerankValues.value
-  return values.length > 0 ? Math.min(...values) : 0
-})
-
-const pagerankMax = computed(() => {
-  const values = pagerankValues.value
-  return values.length > 0 ? Math.max(...values) : 1
-})
-
-const pagerankMed = computed(() => {
-  const values = pagerankValues.value
-  if (values.length === 0) return 0
-  const sorted = [...values].sort((a, b) => a - b)
-  const mid = Math.floor(sorted.length / 2)
-  return sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2
-})
-
-// 计算大小图例的尺寸
-const sizeMin = computed(() => {
-  if (!radiusScale) return 10
-  return radiusScale(pagerankMin.value) * 2
-})
-
-const sizeMed = computed(() => {
-  if (!radiusScale) return 20
-  return radiusScale(pagerankMed.value) * 2
-})
-
-const sizeMax = computed(() => {
-  if (!radiusScale) return 30
-  return radiusScale(pagerankMax.value) * 2
-})
-
-// 计算 PageRank 区间边界
-const pagerankRange = computed(() => {
-  return pagerankMax.value - pagerankMin.value
-})
-
-const pagerankLowBound = computed(() => {
-  return pagerankMin.value + pagerankRange.value / 3
-})
-
-const pagerankMediumBound = computed(() => {
-  return pagerankMin.value + (pagerankRange.value * 2) / 3
-})
-
 // 获取组的颜色
 function getColorForGroup(group) {
   if (!colorScale) return '#D2D2D7'
   return colorScale(group)
-}
-
-// 处理图例悬停
-function handleLegendHover(interval) {
-  // 如果有最短路径活动，不进行高亮
-  if (pathSource.value || pathTarget.value || currentPathNodes.length > 0) return
-  
-  if (!nodeSelection || !linkSelection) return
-  
-  // 确定节点是否在指定区间
-  function isInInterval(node) {
-    const pr = node.pagerank || 0
-    switch (interval) {
-      case 'low':
-        return pr <= pagerankLowBound.value
-      case 'medium':
-        return pr > pagerankLowBound.value && pr <= pagerankMediumBound.value
-      case 'high':
-        return pr > pagerankMediumBound.value
-      default:
-        return false
-    }
-  }
-  
-  // 高亮节点
-  nodeSelection
-    .transition()
-    .duration(300)
-    .style('opacity', d => isInInterval(d) ? 1 : 0.1)
-    .style('stroke', d => isInInterval(d) ? '#007AFF' : '#FFFFFF')
-    .style('stroke-width', d => isInInterval(d) ? 3 : 2)
-    .style('filter', d => isInInterval(d) ? 'drop-shadow(0 0 8px rgba(0, 122, 255, 0.4))' : 'none')
-  
-  // 高亮关联连线
-  linkSelection
-    .transition()
-    .duration(300)
-    .style('opacity', d => {
-      const sourceIn = isInInterval(d.source)
-      const targetIn = isInInterval(d.target)
-      return (sourceIn || targetIn) ? 1 : 0.1
-    })
-    .style('stroke-width', d => {
-      const sourceIn = isInInterval(d.source)
-      const targetIn = isInInterval(d.target)
-      return (sourceIn || targetIn) ? 4 : 2
-    })
-}
-
-// 处理图例离开
-function handleLegendLeave() {
-  // 如果有最短路径活动，不进行重置
-  if (pathSource.value || pathTarget.value || currentPathNodes.length > 0) return
-  
-  if (!nodeSelection || !linkSelection) return
-  
-  // 重置节点
-  nodeSelection
-    .transition()
-    .duration(300)
-    .style('opacity', 1)
-    .style('stroke', null)
-    .style('stroke-width', null)
-    .style('filter', 'none')
-  
-  // 重置连线
-  linkSelection
-    .transition()
-    .duration(300)
-    .style('opacity', 0.6)
-    .style('stroke-width', 3)
 }
 
 // 判定两个节点是否相连（或者是节点自身）
@@ -1176,7 +1010,7 @@ onUnmounted(() => {
 }
 
 .legend-section {
-  margin-bottom: 16px;
+  margin-bottom: 0;
 }
 
 .legend-subtitle {
@@ -1208,40 +1042,6 @@ onUnmounted(() => {
 
 .color-label {
   flex: 1;
-}
-
-.size-legend {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.size-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-}
-
-.size-circle {
-  border: 2px solid #007AFF;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0, 122, 255, 0.05);
-}
-
-.size-label {
-  flex: 1;
-  color: #1D1D1F;
-}
-
-.size-value {
-  color: #007AFF;
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
-  font-size: 11px;
-  font-weight: 500;
 }
 
 /* 响应式调整 */
