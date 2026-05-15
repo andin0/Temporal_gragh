@@ -1,0 +1,272 @@
+{
+  "mode": "snapshot",
+  "snapshots": [
+    {
+      "timestamp": 1,
+      "nodes": [
+        "S01",
+        "S07",
+        "S08",
+        "S14",
+        "S15"
+      ],
+      "edges": [
+        {
+          "source": "S07",
+          "target": "S15"
+        },
+        {
+          "source": "S15",
+          "target": "S07"
+        },
+        {
+          "source": "S01",
+          "target": "S14"
+        },
+        {
+          "source": "S14",
+          "target": "S01"
+        },
+        {
+          "source": "S14",
+          "target": "S07"
+        },
+        {
+          "source": "S07",
+          "target": "S08"
+        },
+        {
+          "source": "S14",
+          "target": "S08"
+        }
+      ]
+    },
+    {
+      "timestamp": 2,
+      "nodes": [
+        "S01",
+        "S07",
+        "S08",
+        "S14",
+        "S15"
+      ],
+      "edges": [
+        {
+          "source": "S14",
+          "target": "S15"
+        },
+        {
+          "source": "S15",
+          "target": "S14"
+        },
+        {
+          "source": "S08",
+          "target": "S01"
+        },
+        {
+          "source": "S01",
+          "target": "S07"
+        },
+        {
+          "source": "S15",
+          "target": "S08"
+        },
+        {
+          "source": "S07",
+          "target": "S14"
+        }
+      ]
+    },
+    {
+      "timestamp": 3,
+      "nodes": [
+        "S12",
+        "S01",
+        "S07",
+        "S08",
+        "S14",
+        "S15"
+      ],
+      "edges": [
+        {
+          "source": "S01",
+          "target": "S08"
+        },
+        {
+          "source": "S15",
+          "target": "S07"
+        },
+        {
+          "source": "S07",
+          "target": "S15"
+        },
+        {
+          "source": "S08",
+          "target": "S15"
+        },
+        {
+          "source": "S07",
+          "target": "S12"
+        },
+        {
+          "source": "S12",
+          "target": "S08"
+        },
+        {
+          "source": "S01",
+          "target": "S07"
+        },
+        {
+          "source": "S07",
+          "target": "S14"
+        },
+        {
+          "source": "S14",
+          "target": "S07"
+        },
+        {
+          "source": "S12",
+          "target": "S15"
+        }
+      ]
+    },
+    {
+      "timestamp": 4,
+      "nodes": [
+        "S01",
+        "S07",
+        "S03",
+        "S09",
+        "S20",
+        "S08",
+        "S14",
+        "S15"
+      ],
+      "edges": [
+        {
+          "source": "S01",
+          "target": "S09"
+        },
+        {
+          "source": "S20",
+          "target": "S09"
+        },
+        {
+          "source": "S09",
+          "target": "S20"
+        },
+        {
+          "source": "S03",
+          "target": "S08"
+        },
+        {
+          "source": "S08",
+          "target": "S03"
+        },
+        {
+          "source": "S15",
+          "target": "S03"
+        },
+        {
+          "source": "S07",
+          "target": "S03"
+        },
+        {
+          "source": "S03",
+          "target": "S07"
+        },
+        {
+          "source": "S09",
+          "target": "S14"
+        },
+        {
+          "source": "S14",
+          "target": "S09"
+        },
+        {
+          "source": "S15",
+          "target": "S07"
+        },
+        {
+          "source": "S03",
+          "target": "S01"
+        }
+      ]
+    },
+    {
+      "timestamp": 5,
+      "nodes": [
+        "S01",
+        "S07",
+        "S03",
+        "S09",
+        "S20",
+        "S08",
+        "S14",
+        "S15"
+      ],
+      "edges": [
+        {
+          "source": "S14",
+          "target": "S20"
+        },
+        {
+          "source": "S20",
+          "target": "S14"
+        },
+        {
+          "source": "S01",
+          "target": "S20"
+        },
+        {
+          "source": "S20",
+          "target": "S01"
+        },
+        {
+          "source": "S03",
+          "target": "S14"
+        },
+        {
+          "source": "S15",
+          "target": "S20"
+        },
+        {
+          "source": "S20",
+          "target": "S07"
+        },
+        {
+          "source": "S08",
+          "target": "S09"
+        },
+        {
+          "source": "S14",
+          "target": "S03"
+        },
+        {
+          "source": "S09",
+          "target": "S07"
+        },
+        {
+          "source": "S15",
+          "target": "S01"
+        },
+        {
+          "source": "S09",
+          "target": "S01"
+        },
+        {
+          "source": "S01",
+          "target": "S09"
+        },
+        {
+          "source": "S15",
+          "target": "S08"
+        },
+        {
+          "source": "S08",
+          "target": "S15"
+        }
+      ]
+    }
+  ]
+}

@@ -418,9 +418,19 @@ function handleSearch() {
   }
 
   if (nodeSelection && linkSelection) {
-    nodeSelection.style('opacity', (o) => {
-      return isConnected(targetNode, o) ? 1 : 0.1;
-    });
+    nodeSelection
+      .style('opacity', (o) => {
+        return isConnected(targetNode, o) ? 1 : 0.1;
+      })
+      .attr('stroke', (o) => {
+        return o.id === targetNode.id ? '#007AFF' : '#FFFFFF';
+      })
+      .attr('stroke-width', (o) => {
+        return o.id === targetNode.id ? 5 : 2;
+      })
+      .style('filter', (o) => {
+        return o.id === targetNode.id ? 'drop-shadow(0 0 12px rgba(0, 122, 255, 0.6))' : 'none';
+      });
 
     linkSelection
       .style('opacity', (o) => {
@@ -441,7 +451,11 @@ function handleReset() {
   }
 
   if (nodeSelection && linkSelection) {
-    nodeSelection.style('opacity', 1);
+    nodeSelection
+      .style('opacity', 1)
+      .attr('stroke', '#FFFFFF')
+      .attr('stroke-width', 2)
+      .style('filter', 'none');
     linkSelection
       .style('opacity', 0.7)
       .style('stroke-width', 2);
