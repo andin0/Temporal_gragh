@@ -1,5 +1,6 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
+import json
 import os
 import networkx as nx
 from werkzeug.utils import secure_filename
@@ -113,25 +114,26 @@ def get_snapshot_graphs():
 def upload_file():
     """上传文件并解析为图表数据"""
 
-    global global_G
+    global global_G, timestamp_data, snapshot_data
     try:
         # 检查是否有文件
         if 'file' not in request.files:
             return jsonify({'error': '缺少文件参数'}), 400
         
         file = request.files['file']
+        filename = (file.filename or '').lower()
         
         # 保存临时文件
         temp_filename = 'temp_upload' + os.path.splitext(file.filename)[1]
         file.save(temp_filename)
         
-        # 加载数据并检测模式
-        if file.filename.endswith('.csv'):
+        # 加载数据并检测模式（扩展名不区分大小写）
+        if filename.endswith('.csv'):
             import pandas as pd
             df = pd.read_csv(temp_filename)
             detected_mode = detect_mode(df)
             data = load_from_csv(temp_filename, detected_mode)
-        elif file.filename.endswith('.json'):
+        elif filename.endswith('.json'):
             data = load_from_json(temp_filename)
             detected_mode = detect_mode(data)
         else:
@@ -142,7 +144,7 @@ def upload_file():
         if detected_mode == 'timestamp':
             graph = build_timestamp_graph(data)
             result = graph_to_dict(graph)
-            # 更新全局图对象
+            timestamp_data = data
             global_G = graph
         else:  # snapshot
             graphs = build_snapshot_graphs(data)
@@ -157,7 +159,7 @@ def upload_file():
                     'nodes': graph_dict['nodes'],
                     'links': graph_dict['links']
                 })
-            # 使用第一个快照更新全局图对象
+            snapshot_data = data
             global_G = graphs[0]
         
         # 清理临时文件
@@ -169,6 +171,10 @@ def upload_file():
             'detected_mode': detected_mode
         }
         return jsonify(response)
+    except (KeyError, ValueError, json.JSONDecodeError) as e:
+        if 'temp_filename' in locals() and os.path.exists(temp_filename):
+            os.remove(temp_filename)
+        return jsonify({'error': str(e)}), 400
     except Exception as e:
         # 清理临时文件
         if 'temp_filename' in locals() and os.path.exists(temp_filename):

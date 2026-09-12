@@ -1,6 +1,7 @@
 from io import BytesIO
 
 import pytest
+import app as app_module
 from app import app
 
 
@@ -8,6 +9,7 @@ from app import app
 # 创建 Flask 测试客户端
 def client():
     app.config.update(TESTING=True)
+    app_module.load_mock_data()
 
     with app.test_client() as client:
         yield client
