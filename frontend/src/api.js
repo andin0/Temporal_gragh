@@ -52,6 +52,19 @@ export async function uploadGraphFile(file) {
   }
 }
 
+// 运行本机后端自动化测试
+export async function runAutomatedTests() {
+  try {
+    const response = await axios.post(`${API_BASE_URL}/api/run-tests`)
+    return response.data
+  } catch (error) {
+    if (error.response) {
+      throw new Error(error.response.data.message || '测试接口调用失败')
+    }
+    throw new Error('无法连接测试接口，请确认后端服务已启动')
+  }
+}
+
 // 计算最短路径
 export async function calculateShortestPath(sourceId, targetId, mode) {
   try {

@@ -31,6 +31,9 @@
             @change="handleFileUpload"
           />
         </div>
+        <button class="cyber-btn" :disabled="isTesting" @click="handleRunTests">
+          {{ isTesting ? '测试中…' : '一键测试' }}
+        </button>
       </div>
     </header>
     
@@ -154,11 +157,12 @@
 import { ref, computed, onUnmounted, watch } from 'vue'
 import GraphView from './components/GraphView.vue'
 import SingleGraph from './components/SingleGraph.vue'
-import { fetchTimestampGraph, fetchSnapshotGraphs, uploadGraphFile } from './api.js'
+import { fetchTimestampGraph, fetchSnapshotGraphs, uploadGraphFile, runAutomatedTests } from './api.js'
 
 const graphData = ref(null)
 const snapshots = ref([])
 const isLoading = ref(false)
+const isTesting = ref(false)
 const toastMessage = ref('')
 const toastVisible = ref(false)
 let toastTimeout = null
@@ -265,6 +269,21 @@ function clearGlobalPath() {
 
 function triggerFileUpload() {
   fileInput.value.click()
+}
+
+async function handleRunTests() {
+  if (isTesting.value) return
+
+  isTesting.value = true
+  try {
+    const result = await runAutomatedTests()
+    const summary = `通过 ${result.passed} 条，失败 ${result.failed} 条，错误 ${result.errors} 条`
+    showToast(result.success ? `测试完成：${summary}` : `测试未全部通过：${summary}`)
+  } catch (error) {
+    showToast(error.message || '自动化测试执行失败')
+  } finally {
+    isTesting.value = false
+  }
 }
 
 async function handleFileUpload(event) {
@@ -423,6 +442,12 @@ onUnmounted(() => {
 .cyber-btn:hover {
   background: #0051D5;
   box-shadow: 0 4px 20px rgba(0, 122, 255, 0.25);
+}
+
+.cyber-btn:disabled {
+  background: #AAB7C4;
+  cursor: not-allowed;
+  box-shadow: none;
 }
 
 .cyber-btn.danger {

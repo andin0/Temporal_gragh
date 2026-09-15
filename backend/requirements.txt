@@ -2,3 +2,4 @@ Flask
 flask-cors
 networkx
 pandas
+scipy

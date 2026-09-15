@@ -2,6 +2,10 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 import json
 import os
+import re
+import subprocess
+import sys
+import time
 import networkx as nx
 from werkzeug.utils import secure_filename
 from data_loader import load_from_csv, load_from_json, build_timestamp_graph, build_snapshot_graphs, graph_to_dict, detect_mode
@@ -73,6 +77,59 @@ def load_mock_data():
 
 # 加载 mock 数据
 load_mock_data()
+
+
+def _count_test_results(output, result_name):
+    """从 Pytest 摘要中提取某类测试数量。"""
+    match = re.search(rf'(\d+)\s+{result_name}', output)
+    return int(match.group(1)) if match else 0
+
+
+def run_backend_tests():
+    """在本机固定的 tests 目录运行 Pytest，并返回可展示的摘要。"""
+    started_at = time.monotonic()
+    try:
+        completed = subprocess.run(
+            [sys.executable, '-m', 'pytest', 'tests', '-q', '--tb=short'],
+            cwd=os.path.dirname(os.path.abspath(__file__)),
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
+        )
+        output = (completed.stdout + '\n' + completed.stderr).strip()[-4000:]
+        return {
+            'success': completed.returncode == 0,
+            'passed': _count_test_results(output, 'passed'),
+            'failed': _count_test_results(output, 'failed'),
+            'errors': _count_test_results(output, 'errors?'),
+            'duration_seconds': round(time.monotonic() - started_at, 2),
+            'output': output or '测试执行完成，但未返回文本输出。',
+        }
+    except subprocess.TimeoutExpired:
+        return {
+            'success': False,
+            'passed': 0,
+            'failed': 0,
+            'errors': 1,
+            'duration_seconds': round(time.monotonic() - started_at, 2),
+            'output': '测试执行超时（超过 60 秒）。',
+        }
+    except OSError:
+        return {
+            'success': False,
+            'passed': 0,
+            'failed': 0,
+            'errors': 1,
+            'duration_seconds': round(time.monotonic() - started_at, 2),
+            'output': '无法启动测试进程，请确认后端虚拟环境已安装 pytest。',
+        }
+
+
+@app.route('/api/run-tests', methods=['POST'])
+def run_tests():
+    """本机一键测试接口，不接收命令或路径参数。"""
+    return jsonify(run_backend_tests())
 
 @app.route('/api/graph/timestamp', methods=['GET'])
 def get_timestamp_graph():
