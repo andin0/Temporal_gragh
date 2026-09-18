@@ -77,12 +77,24 @@ npm run dev
 
 ## 运行测试
 
-自动化测试由小组自行维护在 `backend/tests/` 中。安装开发依赖后，在 `backend` 目录执行：
+测试代码在 `backend/tests/`。虚拟环境在仓库根目录 `.venv`（若还没有，在仓库根目录执行 `python -m venv .venv`）。
+
+在 `backend` 目录安装开发依赖后，一键跑全部用例（模块一 + 模块二）：
 
 ```powershell
-.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
-.\.venv\Scripts\python.exe -m pytest -q
+cd backend
+..\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+..\.venv\Scripts\python.exe -m pytest -q
 ```
+
+只跑模块二（AI 生成后经人工核对的脚本 `tests/test_m2_pjj.py`）：
+
+```powershell
+cd backend
+..\.venv\Scripts\python.exe -m pytest tests/test_m2_pjj.py -v
+```
+
+当前合计 52 条，应全部通过。若本机虚拟环境建在 `backend/.venv`，把上面的 `..\.venv` 改成 `.\.venv` 即可。
 
 ## 常见问题
 

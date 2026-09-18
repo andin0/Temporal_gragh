@@ -3,6 +3,26 @@ import networkx as nx
 import json
 from networkx.algorithms import community
 
+
+def _json_safe(value):
+    """把 pandas/numpy 标量转成 JSON 可序列化的 Python 类型。"""
+    if value is None:
+        return None
+    try:
+        if pd.isna(value):
+            return None
+    except (TypeError, ValueError):
+        pass
+    if hasattr(value, "item") and not isinstance(value, (bytes, str)):
+        try:
+            value = value.item()
+        except (ValueError, AttributeError):
+            pass
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    return value
+
+
 def detect_mode(data):
     """
     自动检测数据模式
@@ -27,12 +47,13 @@ def detect_mode(data):
         # 默认返回snapshot
         return 'snapshot'
     elif isinstance(data, pd.DataFrame):
-        # CSV数据
-        columns = [col.lower() for col in data.columns]
+        # CSV数据：含 nodes/edges 的是快照表，即使同时有 timestamp 列
+        columns = [str(col).lower() for col in data.columns]
+        if 'nodes' in columns and 'edges' in columns:
+            return 'snapshot'
         if 'timestamp' in columns or 'time' in columns:
             return 'timestamp'
-        else:
-            return 'snapshot'
+        return 'snapshot'
     else:
         raise ValueError("Unsupported data type")
 
@@ -48,31 +69,49 @@ def load_from_csv(file_path, mode):
         dict: 加载的数据
     """
     df = pd.read_csv(file_path)
-    
+    cols = {str(c).lower(): c for c in df.columns}
+
     if mode == 'timestamp':
-        # 时间戳模式：每行代表一条边，包含source, target, timestamp
+        # 时间戳模式：每行代表一条边，包含source, target, timestamp（time 为别名）
+        source_col = cols.get('source')
+        target_col = cols.get('target')
+        ts_col = cols.get('timestamp') or cols.get('time')
+        if source_col is None or target_col is None or ts_col is None:
+            missing = []
+            if source_col is None:
+                missing.append('source')
+            if target_col is None:
+                missing.append('target')
+            if ts_col is None:
+                missing.append('timestamp')
+            raise KeyError(missing[0] if len(missing) == 1 else missing)
         data = {
             'mode': 'timestamp',
             'edges': []
         }
         for _, row in df.iterrows():
             edge = {
-                'source': row['source'],
-                'target': row['target'],
-                'timestamp': row['timestamp']
+                'source': _json_safe(row[source_col]),
+                'target': _json_safe(row[target_col]),
+                'timestamp': _json_safe(row[ts_col]),
             }
             data['edges'].append(edge)
     elif mode == 'snapshot':
         # 快照模式：每行代表一个快照，包含timestamp, nodes, edges
+        ts_col = cols.get('timestamp') or cols.get('time')
+        nodes_col = cols.get('nodes')
+        edges_col = cols.get('edges')
+        if ts_col is None or nodes_col is None or edges_col is None:
+            raise KeyError('snapshot csv 需要 timestamp/nodes/edges 列')
         data = {
             'mode': 'snapshot',
             'snapshots': []
         }
         for _, row in df.iterrows():
             snapshot = {
-                'timestamp': row['timestamp'],
-                'nodes': json.loads(row['nodes']),
-                'edges': json.loads(row['edges'])
+                'timestamp': _json_safe(row[ts_col]),
+                'nodes': json.loads(row[nodes_col]),
+                'edges': json.loads(row[edges_col]),
             }
             data['snapshots'].append(snapshot)
     else:
@@ -90,7 +129,7 @@ def load_from_json(file_path):
     Returns:
         dict: 加载的数据
     """
-    with open(file_path, 'r') as f:
+    with open(file_path, 'r', encoding='utf-8') as f:
         data = json.load(f)
     
     return data
@@ -181,8 +220,8 @@ def graph_to_dict(nx_graph):
     for node in nx_graph.nodes():
         degree = nx_graph.degree(node)
         nodes.append({
-            'id': node,
-            'degree': degree,
+            'id': _json_safe(node),
+            'degree': _json_safe(degree),
             'pagerank': pagerank.get(node, 0),
             'group': community_map.get(node, 0)
         })
@@ -192,17 +231,17 @@ def graph_to_dict(nx_graph):
         # 多重图遍历方式
         for source, target, key, attrs in nx_graph.edges(data=True, keys=True):
             links.append({
-                'source': source,
-                'target': target,
-                'timestamp': attrs.get('timestamp', 0)
+                'source': _json_safe(source),
+                'target': _json_safe(target),
+                'timestamp': _json_safe(attrs.get('timestamp', 0))
             })
     else:
         # 普通图遍历方式
         for source, target, attrs in nx_graph.edges(data=True):
             links.append({
-                'source': source,
-                'target': target,
-                'timestamp': attrs.get('timestamp', 0)
+                'source': _json_safe(source),
+                'target': _json_safe(target),
+                'timestamp': _json_safe(attrs.get('timestamp', 0))
             })
     
     return {
