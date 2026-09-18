@@ -6,6 +6,7 @@
 
 from types import SimpleNamespace
 from unittest.mock import patch
+import subprocess
 
 from data_loader import (
     build_timestamp_graph,
@@ -25,7 +26,6 @@ def test_detect_mode_accepts_time_column():
 # TG-M2-PJJ-002 仅有 time 列的 CSV 上传后应能构图，不应 500
 def test_upload_csv_time_column_should_build_graph(post_upload):
     resp = post_upload("t.csv", "source,target,time\nA,B,1\n")
-    assert resp.status_code != 500
     body = resp.get_json()
     assert resp.status_code == 200
     assert body["detected_mode"] == "timestamp"
@@ -88,7 +88,7 @@ def test_upload_csv_numeric_node_ids(post_upload):
     resp = post_upload("num.csv", "source,target,timestamp\n1,2,1\n")
     assert resp.status_code == 200
     ids = {n["id"] for n in resp.get_json()["data"]["nodes"]}
-    assert {str(i) for i in ids} == {"1", "2"} or ids == {1, 2}
+    assert ids == {1, 2}
 
 
 # TG-M2-PJJ-008 最短路径 links 为前端 D3 对象格式
@@ -112,7 +112,7 @@ def test_shortest_path_accepts_d3_link_objects(client):
 def test_csv_missing_target_column_should_be_client_error(post_upload):
     resp = post_upload("notarget.csv", "source,timestamp\nA,1\n")
     assert resp.status_code == 400
-    assert "error" in resp.get_json()
+    assert resp.get_json() == {"error": "'target'"}
 
 
 # TG-M2-PJJ-010 大写 JSON 扩展名应能上传
@@ -162,8 +162,7 @@ def test_graph_to_dict_on_empty_timestamp_graph():
 # TG-M2-PJJ-014 JSON 有 edges 但第一条没有 timestamp，detect_mode 行为应可预期
 def test_detect_mode_edges_without_timestamp_field():
     data = {"edges": [{"source": "A", "target": "B"}]}
-    mode = detect_mode(data)
-    assert mode in ("timestamp", "snapshot")
+    assert detect_mode(data) == "snapshot"
 
 
 # TG-M2-PJJ-015 一键测试接口应返回摘要字段（打桩，避免套娃跑整套 pytest）
@@ -177,10 +176,11 @@ def test_run_tests_endpoint_returns_summary(client):
         resp = client.post("/api/run-tests")
     assert resp.status_code == 200
     body = resp.get_json()
-    assert "success" in body
-    assert "passed" in body
-    assert "failed" in body
-    assert "output" in body
+    assert body["success"] is True
+    assert body["passed"] == 2
+    assert body["failed"] == 0
+    assert body["errors"] == 0
+    assert body["output"] == "2 passed in 0.10s"
 
 
 # TG-M2-PJJ-016 缺 links 参数应 400
@@ -190,7 +190,7 @@ def test_shortest_path_missing_links_is_client_error(client):
         json={"source": "A", "target": "B"},
     )
     assert resp.status_code == 400
-    assert "error" in resp.get_json()
+    assert resp.get_json() == {"error": "缺少必要参数"}
 
 
 # TG-M2-PJJ-017 负时间戳应能建边
@@ -200,3 +200,65 @@ def test_negative_timestamp_kept():
     )
     result = graph_to_dict(graph)
     assert result["links"][0]["timestamp"] == -1
+
+
+# TG-M2-PJJ-018 损坏的 JSON 上传应是客户端错误，而非服务器错误
+def test_upload_invalid_json_is_client_error(post_upload):
+    resp = post_upload("broken.json", '{"mode":')
+
+    assert resp.status_code == 400
+    assert "error" in resp.get_json()
+
+
+# TG-M2-PJJ-019 快照 CSV 中的 edges 字段不是 JSON 时应返回 400
+def test_upload_snapshot_csv_with_invalid_edges_json_is_client_error(post_upload):
+    content = 'timestamp,nodes,edges\n1,"[""A""]","not-json"\n'
+    resp = post_upload("broken-snapshot.csv", content)
+
+    assert resp.status_code == 400
+    assert "error" in resp.get_json()
+
+
+# TG-M2-PJJ-020 一键测试接口应能解析 Pytest 失败摘要（打桩，不启动子进程）
+def test_run_tests_endpoint_reports_failed_pytest_summary(client):
+    fake = SimpleNamespace(
+        returncode=1,
+        stdout="16 passed, 1 failed in 0.20s",
+        stderr="",
+    )
+    with patch("app.subprocess.run", return_value=fake):
+        resp = client.post("/api/run-tests")
+
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["success"] is False
+    assert body["passed"] == 16
+    assert body["failed"] == 1
+    assert body["errors"] == 0
+
+
+# TG-M2-PJJ-021 一键测试超时时应返回可展示的失败摘要
+def test_run_tests_endpoint_reports_timeout(client):
+    with patch(
+        "app.subprocess.run",
+        side_effect=subprocess.TimeoutExpired("pytest", 60),
+    ):
+        resp = client.post("/api/run-tests")
+
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["success"] is False
+    assert body["errors"] == 1
+    assert "超时" in body["output"]
+
+
+# TG-M2-PJJ-022 一键测试进程无法启动时应返回可展示的失败摘要
+def test_run_tests_endpoint_reports_process_start_failure(client):
+    with patch("app.subprocess.run", side_effect=OSError("missing executable")):
+        resp = client.post("/api/run-tests")
+
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["success"] is False
+    assert body["errors"] == 1
+    assert "无法启动" in body["output"]
